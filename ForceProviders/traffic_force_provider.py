@@ -1,6 +1,8 @@
+from DataAccess.i_data_access_handler import AreaTuple
 from ForceProviders.i_force_provider import IForceProvider
+from Types.latlon import LatLon
 from params import Params
-from vec2 import Vec2, create_vec2_array
+from Types.vec2 import Vec2, create_vec2_array
 from dataclasses import dataclass
 from vessel_types import VesselType
 import datetime as dt
@@ -17,10 +19,7 @@ class Config:
     start_date: dt.date
     end_date: dt.date
     sample_rate: int
-    area_top_left_lat: float
-    area_top_left_lon: float
-    area_bottom_right_lat: float
-    area_bottom_right_lon: float
+    area: AreaTuple
     vessel_types: list[VesselType]
     base_zoom: int
     active_zoom: int
@@ -40,10 +39,13 @@ class TrafficForceProvider(IForceProvider):
         tile_map = 0
 
         if os.path.exists(file_name):
+            print(f"Loading tile map from '{file_name}'")
             with open(file_name, 'rb') as f:
                 tile_map = pickle.load(f)
+            print(f"Loaded {len(tile_map)} tiles from '{file_name}'\n")
         else:
-            high_res_tiles = self._get_tile_map()
+            high_res_tiles = self._get_tiles()
+            print(f"Saving tile map to '{file_name}'")
             with open(file_name, 'wb') as f:
                 pickle.dump(high_res_tiles, f)
             print(f"Saved {len(high_res_tiles)} tiles to '{file_name}'\n")
@@ -52,7 +54,7 @@ class TrafficForceProvider(IForceProvider):
         tile_map = self._get_tile_map_at_zoom(tile_map, cfg.active_zoom)
         self._vector_map = self._get_vector_field(tile_map)
 
-    def _get_tile_map(self):
+    def _get_tiles(self):
         days: list[dt.date] = []
 
         cur_date = self._cfg.start_date
@@ -60,15 +62,12 @@ class TrafficForceProvider(IForceProvider):
             days.append(cur_date)
             cur_date = cur_date + dt.timedelta(self._cfg.sample_rate)
 
-        ais_messages = self._data_handler.get_ais_messages(days, (
-            self._cfg.area_top_left_lat, self._cfg.area_top_left_lon,
-            self._cfg.area_bottom_right_lat, self._cfg.area_bottom_right_lon
-        ))
+        ais_messages = self._data_handler.get_ais_messages(days, self._cfg.area)
 
-        print(f"--- Step 1: Pre-computing tiles at base zoom {self._cfg.base_zoom} ---")
+        print(f"Pre-computing tiles at base zoom {self._cfg.base_zoom}")
         high_res_tiles = []
         for msg in ais_messages:
-            tile = mercantile.tile(msg['lon'], msg['lat'], zoom=self._cfg.base_zoom)
+            tile = mercantile.tile(msg.longitude, msg.latitude, zoom=self._cfg.base_zoom)
             high_res_tiles.append(tile)
 
         return high_res_tiles
@@ -78,37 +77,40 @@ class TrafficForceProvider(IForceProvider):
         if not tile_map:
             return Counter()
 
+        print(f"Downscaling tiles to zoom {zoom}")
+
         base_zoom = tile_map[0].z
         if zoom > base_zoom:
             raise ValueError(
                 f"Target zoom ({zoom}) cannot be greater than the base zoom ({base_zoom}).")
 
-        parent_tiles = (mercantile.parent(tile, zoom=zoom)
-                        for tile in tile_map)
+        parent_tiles = (mercantile.parent(tile, zoom=zoom) for tile in tile_map)
 
         return Counter(parent_tiles)
 
     def _get_vector_field(self, tile_map):
-        top_left_tile = mercantile.tile(self._cfg.area_top_left_lon,
-                                        self._cfg.area_top_left_lat, zoom=self._cfg.active_zoom)
-        bottom_right_tile = mercantile.tile(self._cfg.area_bottom_right_lon,
-                                            self._cfg.area_bottom_right_lat, zoom=self._cfg.active_zoom)
+        print(f"Creating vector field from tile map")
 
-        num_x_tiles = bottom_right_tile.x - top_left_tile.x
-        num_y_tiles = bottom_right_tile.y - top_left_tile.y
+        bot_left_tile = mercantile.tile(self._cfg.area.bot_left.lon,
+                                        self._cfg.area.bot_left.lat, zoom=self._cfg.active_zoom)
+        top_right_tile = mercantile.tile(self._cfg.area.top_right.lon,
+                                         self._cfg.area.top_right.lat, zoom=self._cfg.active_zoom)
 
-        tile_counts = []
-        for y in range(num_y_tiles):
-            row_counts = []
-            for x in range(num_x_tiles):
-                tile = mercantile.Tile(top_left_tile.x + x, top_left_tile.y + y, self._cfg.active_zoom)
-                count = tile_map.get(tile, 0)
-                row_counts.append(count)
-            tile_counts.append(row_counts)
+        num_x_tiles = top_right_tile.x - bot_left_tile.x
+        num_y_tiles = bot_left_tile.y - top_right_tile.y
 
-        Z = np.array(tile_counts, dtype=np.float32)
-        y = np.arange(Z.shape[0])
-        x = np.arange(Z.shape[1])
+        Z = np.zeros((num_y_tiles, num_x_tiles), dtype=np.float32)
+
+        for tile, count in tile_map.items():
+            if (bot_left_tile.x <= tile.x < top_right_tile.x and
+                    top_right_tile.y <= tile.y < bot_left_tile.y):
+
+                idx_x = tile.x - bot_left_tile.x
+                idx_y = tile.y - top_right_tile.y
+
+                if 0 <= idx_y < num_y_tiles and 0 <= idx_x < num_x_tiles:
+                    Z[idx_y, idx_x] = count
+
         dz_dy, dz_dx = np.gradient(Z)
         grad_mag = np.sqrt(dz_dx**2 + dz_dy**2)
         vx = -dz_dx / (grad_mag + 1e-8)
@@ -121,7 +123,7 @@ class TrafficForceProvider(IForceProvider):
 
     @staticmethod
     def _get_tilemap_file_name(cfg: Config):
-        return (f"{cfg.output_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.sample_rate=}-{cfg.base_zoom=}.pkl")
+        return (f"{cfg.output_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.area=}-{cfg.sample_rate=}-{cfg.base_zoom=}.pkl")
 
     def get_force(self, p: Params) -> Vec2:
         top_left_tile = mercantile.tile(self._cfg.area_top_left_lon,

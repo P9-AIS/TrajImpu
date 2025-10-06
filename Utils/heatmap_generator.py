@@ -1,5 +1,6 @@
 import os
-from vec2 import Vec2  # Assuming Vec2 is defined elsewhere
+from DataAccess.i_data_access_handler import AreaTuple
+from Types.vec2 import Vec2  # Assuming Vec2 is defined elsewhere
 import datetime
 from ForceProviders.i_force_provider import IForceProvider, Params
 from ForceProviders.traffic_force_provider import TrafficForceProvider
@@ -8,30 +9,29 @@ from dataclasses import dataclass
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
-from vec2 import Vec2
+from Types.vec2 import Vec2
 
 
 @dataclass
 class Config:
-    area_top_left_lat: float
-    area_top_left_lon: float
-    area_bottom_right_lat: float
-    area_bottom_right_lon: float
+    area: AreaTuple
     zoom_level: int
 
 
 def traffic_force_field(fp: TrafficForceProvider, cfg: Config):
-    top_left_tile = mercantile.tile(cfg.area_top_left_lon, cfg.area_top_left_lat, zoom=cfg.zoom_level)
-    bottom_right_tile = mercantile.tile(cfg.area_bottom_right_lon, cfg.area_bottom_right_lat, zoom=cfg.zoom_level)
+    bot_left_tile = mercantile.tile(cfg.area.bot_left.lon,
+                                    cfg.area.bot_left.lat, zoom=cfg.zoom_level)
+    top_right_tile = mercantile.tile(cfg.area.top_right.lon,
+                                     cfg.area.top_right.lat, zoom=cfg.zoom_level)
 
-    num_x_tiles = bottom_right_tile.x - top_left_tile.x
-    num_y_tiles = bottom_right_tile.y - top_left_tile.y
+    num_x_tiles = top_right_tile.x - bot_left_tile.x
+    num_y_tiles = top_right_tile.y - bot_left_tile.y
 
     force_map = []
     for y in range(num_y_tiles):
         row_counts = []
         for x in range(num_x_tiles):
-            tile = mercantile.Tile(top_left_tile.x + x, top_left_tile.y + y, cfg.zoom_level)
+            tile = mercantile.Tile(bot_left_tile.x + x, top_right_tile.y + y, cfg.zoom_level)
             lng_lat = mercantile.ul(tile)
             heat = fp.get_force(Params(0, lng_lat.lat, lng_lat.lng, 0, 0, 0))
             row_counts.append(heat)

@@ -1,5 +1,5 @@
 from params import Params
-from vec2 import Vec2
+from Types.vec2 import Vec2
 from abc import ABC, abstractmethod
 
 

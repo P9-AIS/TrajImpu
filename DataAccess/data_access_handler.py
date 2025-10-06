@@ -1,12 +1,9 @@
-from collections import namedtuple
 from DataAccess.i_data_connection import IDataConnection
+from DataAccess.i_data_access_handler import IDataAccessHandler, AisMessageTuple, AreaTuple
 import datetime
 
-AisMessageTuple = namedtuple('AisMessageTuple', ['timestamp', 'latitude', 'longitude', 'sog', 'cog', 'vessel_type'])
-AreaTuple = namedtuple('AreaTuple', ['lat_min', 'lon_min', 'lat_max', 'lon_max'])
 
-
-class DataAccessHandler:
+class DataAccessHandler(IDataAccessHandler):
     def __init__(self, db_connection: IDataConnection):
         self.db_connection = db_connection
 
@@ -30,8 +27,8 @@ class DataAccessHandler:
             params = (
                 start_of_day,
                 end_of_day,
-                area.lat_min, area.lat_max,
-                area.lon_min, area.lon_max
+                area.bot_left.lat, area.top_right.lat,
+                area.bot_left.lon, area.top_right.lon
             )
 
             day_results = self.db_conn.execute_query(query_template, params)

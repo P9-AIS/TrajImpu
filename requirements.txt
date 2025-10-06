@@ -26,4 +26,5 @@ six==1.17.0
 smmap==5.0.2
 sympy==1.14.0
 torch==2.8.0
+tqdm==4.67.1
 typing_extensions==4.15.0
