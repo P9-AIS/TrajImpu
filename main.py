@@ -2,6 +2,8 @@ from ForceProviders.traffic_force_provider import TrafficForceProvider, Config a
 import datetime as dt
 from params import Params
 from Utils.heatmap_generator import Config as HGCfg, generate_vectormap, traffic_force_field, generate_heatmap
+from DataAccess.data_access_handler import DataAccessHandler
+from DataAccess.postgres_connection import PostgresConnection, Config as PGCfg
 
 
 def main():
@@ -13,9 +15,16 @@ def main():
         54.624055, 15.958911,
         [],
         18,
-        10,
-        "Outputs/Tilemaps"
-    ))
+        10
+    ),
+        data_handler=DataAccessHandler(PostgresConnection(PGCfg(
+            "localhost",
+            5432,
+            "postgres",
+            "postgres",
+            "password"
+        )))
+    )
 
     # print(prov.get_force(Params(
     #     0,

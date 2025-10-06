@@ -9,6 +9,7 @@ from collections import Counter
 import pickle
 import os
 import numpy as np
+from DataAccess.data_access_handler import DataAccessHandler
 
 
 @dataclass
@@ -23,15 +24,17 @@ class Config:
     vessel_types: list[VesselType]
     base_zoom: int
     active_zoom: int
-    output_dir: str
+    output_dir: str = "Outputs/Tilemaps"
 
 
 class TrafficForceProvider(IForceProvider):
     _vector_map: list[list[Vec2]]
     _cfg: Config
+    _data_handler: DataAccessHandler
 
-    def __init__(self, cfg: Config):
+    def __init__(self, cfg: Config, data_handler: DataAccessHandler):
         self._cfg = cfg
+        self._data_handler = data_handler
         file_name = self._get_tilemap_file_name(cfg)
         os.makedirs(cfg.output_dir, exist_ok=True)
         tile_map = 0
@@ -57,7 +60,10 @@ class TrafficForceProvider(IForceProvider):
             days.append(cur_date)
             cur_date = cur_date + dt.timedelta(self._cfg.sample_rate)
 
-        ais_messages = self._get_ais_messages(days)
+        ais_messages = self._data_handler.get_ais_messages(days, (
+            self._cfg.area_top_left_lat, self._cfg.area_top_left_lon,
+            self._cfg.area_bottom_right_lat, self._cfg.area_bottom_right_lon
+        ))
 
         print(f"--- Step 1: Pre-computing tiles at base zoom {self._cfg.base_zoom} ---")
         high_res_tiles = []
@@ -81,17 +87,6 @@ class TrafficForceProvider(IForceProvider):
                         for tile in tile_map)
 
         return Counter(parent_tiles)
-
-    @staticmethod
-    def _get_ais_messages(days: list[dt.date]):
-        ais_messages = [
-            {'mmsi': '219000001', 'lat': 57.04, 'lon': 9.92},
-            {'mmsi': '219000002', 'lat': 57.05, 'lon': 9.93},
-            {'mmsi': '219000002', 'lat': 57.066227, 'lon': 9.790968},
-            {'mmsi': '367000001', 'lat': 40.71, 'lon': -74.00},
-            {'mmsi': '367000002', 'lat': 40.72, 'lon': -74.01},
-        ]
-        return ais_messages
 
     def _get_vector_field(self, tile_map):
         top_left_tile = mercantile.tile(self._cfg.area_top_left_lon,
