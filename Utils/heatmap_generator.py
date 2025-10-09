@@ -71,11 +71,21 @@ def generate_heatmap_image(cfg):
         force_magnitudes[y - cfg.vectormap[0].min_y_tile,
                          x - cfg.vectormap[0].min_x_tile] = magnitude
 
-    # Create binary mask: white if magnitude > 0, black if 0
-    mask = (force_magnitudes != 0).astype(np.uint8) * 255  # 0 or 255
+    low, high = np.percentile(force_magnitudes[force_magnitudes > 0], [1, 99])
+    normalized = np.clip((force_magnitudes - low) / (high - low), 0, 1)
 
-    # Convert to image
-    img = Image.fromarray(mask, mode='L')  # 'L' = 8-bit grayscale
+    cmap = plt.get_cmap('inferno')  # great dynamic range
+    colored = cmap(normalized)
+    colored[..., 3] = (normalized > 0).astype(float)  # transparency for zero values
+    # img = Image.fromarray((colored * 255).astype(np.uint8), mode='RGBA')
+    img = Image.fromarray((colored[:, :, :3] * 255).astype(np.uint8), mode='RGB')
+
+    # Apply colormap (e.g. 'plasma', 'viridis', 'inferno', 'jet')
+    # cmap = plt.get_cmap('plasma')
+    # colored = cmap(normalized)  # Returns RGBA values in range [0, 1]
+
+    # # Convert to 8-bit RGB image
+    # img = Image.fromarray((colored[:, :, :3] * 255).astype(np.uint8), mode='RGB')
 
     # Optional scaling
     tile_size = max(cfg.target_pixel_size // max(num_x_tiles, num_y_tiles), 1)
