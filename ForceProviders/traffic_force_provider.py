@@ -31,7 +31,7 @@ class TrafficForceProvider(IForceProvider):
     _cfg: Config
     _data_handler: DataAccessHandler
 
-    def __init__(self, cfg: Config, data_handler: DataAccessHandler):
+    def __init__(self, data_handler: DataAccessHandler, cfg: Config):
         self._cfg = cfg
         self._data_handler = data_handler
         file_name = self._get_tilemap_file_name(cfg)

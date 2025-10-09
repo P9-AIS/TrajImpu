@@ -11,27 +11,27 @@ class DataAccessHandler(IDataAccessHandler):
         all_results = []
 
         query_template = """
-        SELECT timestamp, latitude, longitude, sog, cog, vessel_type
-        FROM ais_data
-        WHERE timestamp >= %s AND timestamp < %s
-          AND latitude BETWEEN %s AND %s
-          AND longitude BETWEEN %s AND %s
+        SELECT lat, lon
+        FROM fact.ais_point_fact
+        JOIN dim.date_dim dd
+            ON ais_point_fact.date_id = dd.date_id
+        WHERE dd.year_no = %s AND dd.month_no = %s AND dd.day_no = %s
+        AND lat BETWEEN %s AND %s
+        AND lon BETWEEN %s AND %s;
         """
 
         print(f"Fetching AIS data for {len(dates)} days in area {area}...")
 
         for date in dates:
-            start_of_day = date
-            end_of_day = start_of_day + datetime.timedelta(days=1)
-
             params = (
-                start_of_day,
-                end_of_day,
+                date.year,
+                date.month,
+                date.day,
                 area.bot_left.lat, area.top_right.lat,
                 area.bot_left.lon, area.top_right.lon
             )
 
-            day_results = self.db_conn.execute_query(query_template, params)
+            day_results = self.db_connection.execute_query(query_template, params)
 
             if day_results:
                 all_results.extend(day_results)

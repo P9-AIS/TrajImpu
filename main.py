@@ -1,20 +1,14 @@
 from Config.parser import parse_config
-from DataAccess.i_data_access_handler import AreaTuple
-from ForceProviders.traffic_force_provider import (
-    TrafficForceProvider,
-    Config as TFPConfig,
-)
-import datetime as dt
-from Types.latlon import LatLon
+from DataAccess.data_access_handler import DataAccessHandler
+from ForceProviders.traffic_force_provider import TrafficForceProvider
 from Utils.heatmap_generator import generate_heatmap_image
-from DataAccess.mock_data_access_handler import MockDataAccessHandler
-from DataAccess.postgres_connection import PostgresConnection, Config as PGCfg
+from DataAccess.postgres_connection import PostgresConnection
 
 
 def main():
     cfg = parse_config("config.yaml")
 
-    prov = TrafficForceProvider(cfg.trafficForceProviderCfg, data_handler=PostgresConnection(cfg.postgresCfg))
+    prov = TrafficForceProvider(DataAccessHandler(PostgresConnection(cfg.postgresCfg)), cfg.trafficForceProviderCfg)
 
     generate_heatmap_image(prov._vectormap, cfg.heatmapGeneratorCfg)
 

@@ -2,7 +2,7 @@ from collections import namedtuple
 from abc import ABC, abstractmethod
 import datetime
 
-AisMessageTuple = namedtuple('AisMessageTuple', ['timestamp', 'latitude', 'longitude', 'sog', 'cog', 'vessel_type'])
+AisMessageTuple = namedtuple('AisMessageTuple', ['timestamp', 'lat', 'lon', 'sog', 'cog', 'vessel_type'])
 AreaTuple = namedtuple('AreaTuple', ['bot_left', 'top_right'])
 
 

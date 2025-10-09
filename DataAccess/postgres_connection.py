@@ -43,7 +43,7 @@ class PostgresConnection(IDataConnection):
 
         try:
             # Connect to the PostgreSQL database using configuration
-            conn = psycopg2.connect(**self.cfg.__dict__)
+            conn = psycopg2.connect(**self.cfg.__dict__, connect_timeout=5)
 
             # Use the default cursor (which returns tuples) for performance
             with conn.cursor() as cur:
