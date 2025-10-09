@@ -1,17 +1,17 @@
 from DataAccess.i_data_access_handler import AreaTuple
 from ForceProviders.i_force_provider import IForceProvider
-from Types.latlon import LatLon
+from Types.tilemap import Tilemap
 from params import Params
-from Types.vec2 import Vec2, create_vec2_array
+from Types.vec2 import Vec2
 from dataclasses import dataclass
 from vessel_types import VesselType
 import datetime as dt
 import mercantile
-from collections import Counter
 import pickle
 import os
 import numpy as np
 from DataAccess.data_access_handler import DataAccessHandler
+from tqdm import tqdm
 
 
 @dataclass
@@ -27,7 +27,7 @@ class Config:
 
 
 class TrafficForceProvider(IForceProvider):
-    _vector_map: list[list[Vec2]]
+    _vectormap: tuple[Tilemap[float], Tilemap[float]]
     _cfg: Config
     _data_handler: DataAccessHandler
 
@@ -36,25 +36,26 @@ class TrafficForceProvider(IForceProvider):
         self._data_handler = data_handler
         file_name = self._get_tilemap_file_name(cfg)
         os.makedirs(cfg.output_dir, exist_ok=True)
-        tile_map = 0
 
         if os.path.exists(file_name):
             print(f"Loading tile map from '{file_name}'")
             with open(file_name, 'rb') as f:
-                tile_map = pickle.load(f)
+                tile_map: Tilemap = pickle.load(f)
             print(f"Loaded {len(tile_map)} tiles from '{file_name}'\n")
         else:
-            high_res_tiles = self._get_tiles()
+            high_res_tiles = self._get_tile_map()
             print(f"Saving tile map to '{file_name}'")
             with open(file_name, 'wb') as f:
                 pickle.dump(high_res_tiles, f)
             print(f"Saved {len(high_res_tiles)} tiles to '{file_name}'\n")
-            tile_map = high_res_tiles
+            tile_map: Tilemap = high_res_tiles
 
-        tile_map = self._get_tile_map_at_zoom(tile_map, cfg.active_zoom)
-        self._vector_map = self._get_vector_field(tile_map)
+        tile_map = tile_map.downscale_tile_map(self._cfg.active_zoom)
+        print(f"Downsampled tile map to zoom {self._cfg.active_zoom}, now contains {len(tile_map)} tiles")
 
-    def _get_tiles(self):
+        self._vectormap = self._get_vector_map(tile_map)
+
+    def _get_tile_map(self):
         days: list[dt.date] = []
 
         cur_date = self._cfg.start_date
@@ -64,31 +65,26 @@ class TrafficForceProvider(IForceProvider):
 
         ais_messages = self._data_handler.get_ais_messages(days, self._cfg.area)
 
-        print(f"Pre-computing tiles at base zoom {self._cfg.base_zoom}")
-        high_res_tiles = []
-        for msg in ais_messages:
+        print(f"Pre-computing tiles counts at base zoom {self._cfg.base_zoom}")
+
+        bot_left_tile = mercantile.tile(self._cfg.area.bot_left.lon,
+                                        self._cfg.area.bot_left.lat, zoom=self._cfg.base_zoom)
+        top_right_tile = mercantile.tile(self._cfg.area.top_right.lon,
+                                         self._cfg.area.top_right.lat, zoom=self._cfg.base_zoom)
+
+        tile_map = Tilemap(self._cfg.base_zoom,
+                           min_x_tile=bot_left_tile.x, max_x_tile=top_right_tile.x,
+                           min_y_tile=top_right_tile.y, max_y_tile=bot_left_tile.y)
+
+        for msg in tqdm(ais_messages, desc="Aggregating tiles"):
             tile = mercantile.tile(msg.longitude, msg.latitude, zoom=self._cfg.base_zoom)
-            high_res_tiles.append(tile)
+            tile_map.increment(tile.x, tile.y)
 
-        return high_res_tiles
+        print(f"Computed {len(tile_map)} unique tiles at zoom {self._cfg.base_zoom}")
 
-    @staticmethod
-    def _get_tile_map_at_zoom(tile_map, zoom: int):
-        if not tile_map:
-            return Counter()
+        return tile_map
 
-        print(f"Downscaling tiles to zoom {zoom}")
-
-        base_zoom = tile_map[0].z
-        if zoom > base_zoom:
-            raise ValueError(
-                f"Target zoom ({zoom}) cannot be greater than the base zoom ({base_zoom}).")
-
-        parent_tiles = (mercantile.parent(tile, zoom=zoom) for tile in tile_map)
-
-        return Counter(parent_tiles)
-
-    def _get_vector_field(self, tile_map):
+    def _get_vector_map(self, tile_map):
         print(f"Creating vector field from tile map")
 
         bot_left_tile = mercantile.tile(self._cfg.area.bot_left.lon,
@@ -96,20 +92,15 @@ class TrafficForceProvider(IForceProvider):
         top_right_tile = mercantile.tile(self._cfg.area.top_right.lon,
                                          self._cfg.area.top_right.lat, zoom=self._cfg.active_zoom)
 
-        num_x_tiles = top_right_tile.x - bot_left_tile.x
-        num_y_tiles = bot_left_tile.y - top_right_tile.y
+        num_x_tiles = top_right_tile.x - bot_left_tile.x + 1
+        num_y_tiles = bot_left_tile.y - top_right_tile.y + 1
 
         Z = np.zeros((num_y_tiles, num_x_tiles), dtype=np.float32)
 
-        for tile, count in tile_map.items():
-            if (bot_left_tile.x <= tile.x < top_right_tile.x and
-                    top_right_tile.y <= tile.y < bot_left_tile.y):
-
-                idx_x = tile.x - bot_left_tile.x
-                idx_y = tile.y - top_right_tile.y
-
-                if 0 <= idx_y < num_y_tiles and 0 <= idx_x < num_x_tiles:
-                    Z[idx_y, idx_x] = count
+        for (x, y), count in tqdm(tile_map.items(), total=len(tile_map), desc="Building vector field"):
+            idx_x = x - bot_left_tile.x
+            idx_y = y - top_right_tile.y
+            Z[idx_y, idx_x] = count
 
         dz_dy, dz_dx = np.gradient(Z)
         grad_mag = np.sqrt(dz_dx**2 + dz_dy**2)
@@ -119,15 +110,16 @@ class TrafficForceProvider(IForceProvider):
         vx *= Z_norm
         vy *= Z_norm
 
-        return create_vec2_array(vx, vy)
+        return (Tilemap.from_2d(vx, self._cfg.active_zoom, num_x_tiles, num_y_tiles),
+                Tilemap.from_2d(vy, self._cfg.active_zoom, num_x_tiles, num_y_tiles))
 
     @staticmethod
     def _get_tilemap_file_name(cfg: Config):
         return (f"{cfg.output_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.area=}-{cfg.sample_rate=}-{cfg.base_zoom=}.pkl")
 
     def get_force(self, p: Params) -> Vec2:
-        top_left_tile = mercantile.tile(self._cfg.area_top_left_lon,
-                                        self._cfg.area_top_left_lat, zoom=self._cfg.active_zoom)
+        top_left_tile = mercantile.tile(self._cfg.area.top_right.lon,
+                                        self._cfg.area.bot_left.lat, zoom=self._cfg.active_zoom)
 
         active_tile = mercantile.tile(p.lon, p.lat, zoom=self._cfg.active_zoom)
 

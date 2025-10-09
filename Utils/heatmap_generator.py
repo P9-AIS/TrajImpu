@@ -1,3 +1,5 @@
+from Types.tilemap import Tilemap
+from Types.vec2 import Vec2  # Assuming Vec2 has a magnitude() method
 import os
 from DataAccess.i_data_access_handler import AreaTuple
 from Types.vec2 import Vec2  # Assuming Vec2 is defined elsewhere
@@ -10,76 +12,85 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from Types.vec2 import Vec2
+from PIL import Image
 
 
 @dataclass
 class Config:
-    area: AreaTuple
-    zoom_level: int
+    vectormap: tuple[Tilemap[float], Tilemap[float]]
+    output_dir: str = "Outputs/Heatmaps"
+    target_pixel_size: int = 4000
 
 
-def traffic_force_field(fp: TrafficForceProvider, cfg: Config):
-    bot_left_tile = mercantile.tile(cfg.area.bot_left.lon,
-                                    cfg.area.bot_left.lat, zoom=cfg.zoom_level)
-    top_right_tile = mercantile.tile(cfg.area.top_right.lon,
-                                     cfg.area.top_right.lat, zoom=cfg.zoom_level)
+# def generate_heatmap_image(cfg):
+#     os.makedirs(cfg.output_dir, exist_ok=True)
 
-    num_x_tiles = top_right_tile.x - bot_left_tile.x
-    num_y_tiles = top_right_tile.y - bot_left_tile.y
+#     num_x_tiles = cfg.vectormap[0].max_x_tile - cfg.vectormap[0].min_x_tile + 1
+#     num_y_tiles = cfg.vectormap[0].max_y_tile - cfg.vectormap[0].min_y_tile + 1
 
-    force_map = []
-    for y in range(num_y_tiles):
-        row_counts = []
-        for x in range(num_x_tiles):
-            tile = mercantile.Tile(bot_left_tile.x + x, top_right_tile.y + y, cfg.zoom_level)
-            lng_lat = mercantile.ul(tile)
-            heat = fp.get_force(Params(0, lng_lat.lat, lng_lat.lng, 0, 0, 0))
-            row_counts.append(heat)
-        force_map.append(row_counts)
+#     force_magnitudes = np.zeros((num_y_tiles, num_x_tiles), dtype=np.float32)
+#     for (x, y), u in cfg.vectormap[0].items():
+#         v = cfg.vectormap[1][(x, y)]
+#         magnitude = np.sqrt(u**2 + v**2)
+#         force_magnitudes[y - cfg.vectormap[0].min_y_tile,
+#                          x - cfg.vectormap[0].min_x_tile] = magnitude
 
-    return force_map
+#     normalized = 255 * (force_magnitudes - force_magnitudes.min()) / (np.ptp(force_magnitudes) + 1e-8)
+#     normalized = normalized.astype(np.uint8)
+
+#     from matplotlib.cm import viridis
+#     colored = viridis(normalized / 255.0)
+#     image_array = (colored[:, :, :3] * 255).astype(np.uint8)
+
+#     img = Image.fromarray(image_array)
+
+#     tile_size = max(cfg.target_pixel_size // max(num_x_tiles, num_y_tiles), 1)
+#     if tile_size > 1:
+#         img = img.resize((num_x_tiles * tile_size, num_y_tiles * tile_size), resample=Image.NEAREST)
+
+#     filename = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-heatmap.png"
+#     output_path = os.path.join(cfg.output_dir, filename)
+#     img.save(output_path)
+
+#     print(f"Heatmap saved to {output_path}")
 
 
-def generate_heatmap(ff: list[list[Vec2]], tile_size: int = 25, output_dir: str = "Outputs/Heatmaps"):
-    if not ff or not ff[0]:
-        print("Input force field is empty.")
-        return
+def generate_heatmap_image(cfg):
+    os.makedirs(cfg.output_dir, exist_ok=True)
 
-    os.makedirs(output_dir, exist_ok=True)
+    num_x_tiles = cfg.vectormap[0].max_x_tile - cfg.vectormap[0].min_x_tile + 1
+    num_y_tiles = cfg.vectormap[0].max_y_tile - cfg.vectormap[0].min_y_tile + 1
 
-    force_magnitudes = np.array([[v.magnitude() for v in row] for row in ff])
+    # Initialize empty map
+    force_magnitudes = np.zeros((num_y_tiles, num_x_tiles), dtype=np.float32)
 
-    num_y_tiles, num_x_tiles = force_magnitudes.shape
-    fig_width = num_x_tiles * tile_size / 100
-    fig_height = num_y_tiles * tile_size / 100
+    # Fill magnitudes
+    for (x, y), u in cfg.vectormap[0].items():
+        v = cfg.vectormap[1][x, y]
+        magnitude = np.sqrt(u**2 + v**2)
+        force_magnitudes[y - cfg.vectormap[0].min_y_tile,
+                         x - cfg.vectormap[0].min_x_tile] = magnitude
 
-    plt.style.use('dark_background')
-    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+    # Create binary mask: white if magnitude > 0, black if 0
+    mask = (force_magnitudes != 0).astype(np.uint8) * 255  # 0 or 255
 
-    norm = Normalize(vmin=force_magnitudes.min(), vmax=force_magnitudes.max())
-    cbar_label = "Force Magnitude"
+    # Convert to image
+    img = Image.fromarray(mask, mode='L')  # 'L' = 8-bit grayscale
 
-    heatmap = ax.imshow(force_magnitudes, cmap='viridis', norm=norm, origin='lower')
+    # Optional scaling
+    tile_size = max(cfg.target_pixel_size // max(num_x_tiles, num_y_tiles), 1)
+    if tile_size > 1:
+        img = img.resize(
+            (num_x_tiles * tile_size, num_y_tiles * tile_size),
+            resample=Image.NEAREST
+        )
 
-    cbar = fig.colorbar(heatmap, ax=ax, orientation='vertical')
-    cbar.set_label(cbar_label)
-
-    ax.set_title('Heatmap')
-    ax.set_xlabel('Tile X-Coordinate')
-    ax.set_ylabel('Tile Y-Coordinate')
-
-    ax.set_xticks(np.arange(num_x_tiles))
-    ax.set_yticks(np.arange(num_y_tiles))
-    ax.tick_params(axis='x', rotation=45)
-
-    plt.tight_layout()
-
+    # Save image
     filename = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-heatmap.png"
+    output_path = os.path.join(cfg.output_dir, filename)
+    img.save(output_path)
 
-    plt.savefig(f"{output_dir}/{filename}", dpi=100)
-    print(f"Heatmap saved to {output_dir}/{filename}")
-
-    plt.close(fig)
+    print(f"✅ Heatmap saved to {output_path}")
 
 
 def generate_vectormap(ff: list[list[Vec2]], tile_size: int = 25, output_dir: str = "Outputs/Vectormaps"):
