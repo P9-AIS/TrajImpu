@@ -17,7 +17,6 @@ from PIL import Image
 
 @dataclass
 class Config:
-    vectormap: tuple[Tilemap[float], Tilemap[float]]
     output_dir: str = "Outputs/Heatmaps"
     target_pixel_size: int = 4000
 
@@ -55,11 +54,11 @@ class Config:
 #     print(f"Heatmap saved to {output_path}")
 
 
-def generate_heatmap_image(cfg):
+def generate_heatmap_image(vectormap: tuple[Tilemap[float], Tilemap[float]], cfg):
     os.makedirs(cfg.output_dir, exist_ok=True)
 
-    num_x_tiles = cfg.vectormap[0].max_x_tile - cfg.vectormap[0].min_x_tile + 1
-    num_y_tiles = cfg.vectormap[0].max_y_tile - cfg.vectormap[0].min_y_tile + 1
+    num_x_tiles = vectormap[0].max_x_tile - vectormap[0].min_x_tile + 1
+    num_y_tiles = vectormap[0].max_y_tile - vectormap[0].min_y_tile + 1
 
     # Initialize empty map
     force_magnitudes = np.zeros((num_y_tiles, num_x_tiles), dtype=np.float32)

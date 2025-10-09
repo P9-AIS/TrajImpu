@@ -7,10 +7,10 @@ from DataAccess.i_data_connection import IDataConnection
 @dataclass
 class Config:
     host: str
+    port: int
     database: str
     user: str
     password: str
-    port: int
 
 
 class PostgresConnection(IDataConnection):

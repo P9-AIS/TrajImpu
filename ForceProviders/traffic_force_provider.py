@@ -22,7 +22,7 @@ class Config:
     area: AreaTuple
     vessel_types: list[VesselType]
     base_zoom: int
-    active_zoom: int
+    target_zoom: int
     output_dir: str = "Outputs/Tilemaps"
 
 
@@ -50,8 +50,8 @@ class TrafficForceProvider(IForceProvider):
             print(f"Saved {len(high_res_tiles)} tiles to '{file_name}'\n")
             tile_map: Tilemap = high_res_tiles
 
-        tile_map = tile_map.downscale_tile_map(self._cfg.active_zoom)
-        print(f"Downsampled tile map to zoom {self._cfg.active_zoom}, now contains {len(tile_map)} tiles")
+        tile_map = tile_map.downscale_tile_map(self._cfg.target_zoom)
+        print(f"Downsampled tile map to zoom {self._cfg.target_zoom}, now contains {len(tile_map)} tiles")
 
         self._vectormap = self._get_vector_map(tile_map)
 
@@ -88,9 +88,9 @@ class TrafficForceProvider(IForceProvider):
         print(f"Creating vector field from tile map")
 
         bot_left_tile = mercantile.tile(self._cfg.area.bot_left.lon,
-                                        self._cfg.area.bot_left.lat, zoom=self._cfg.active_zoom)
+                                        self._cfg.area.bot_left.lat, zoom=self._cfg.target_zoom)
         top_right_tile = mercantile.tile(self._cfg.area.top_right.lon,
-                                         self._cfg.area.top_right.lat, zoom=self._cfg.active_zoom)
+                                         self._cfg.area.top_right.lat, zoom=self._cfg.target_zoom)
 
         num_x_tiles = top_right_tile.x - bot_left_tile.x + 1
         num_y_tiles = bot_left_tile.y - top_right_tile.y + 1
@@ -110,8 +110,8 @@ class TrafficForceProvider(IForceProvider):
         vx *= Z_norm
         vy *= Z_norm
 
-        return (Tilemap.from_2d(vx, self._cfg.active_zoom, num_x_tiles, num_y_tiles),
-                Tilemap.from_2d(vy, self._cfg.active_zoom, num_x_tiles, num_y_tiles))
+        return (Tilemap.from_2d(vx, self._cfg.target_zoom, num_x_tiles, num_y_tiles),
+                Tilemap.from_2d(vy, self._cfg.target_zoom, num_x_tiles, num_y_tiles))
 
     @staticmethod
     def _get_tilemap_file_name(cfg: Config):
@@ -119,9 +119,9 @@ class TrafficForceProvider(IForceProvider):
 
     def get_force(self, p: Params) -> Vec2:
         top_left_tile = mercantile.tile(self._cfg.area.top_right.lon,
-                                        self._cfg.area.bot_left.lat, zoom=self._cfg.active_zoom)
+                                        self._cfg.area.bot_left.lat, zoom=self._cfg.target_zoom)
 
-        active_tile = mercantile.tile(p.lon, p.lat, zoom=self._cfg.active_zoom)
+        active_tile = mercantile.tile(p.lon, p.lat, zoom=self._cfg.target_zoom)
 
         idx_x = active_tile.x - top_left_tile.x
         idx_y = active_tile.y - top_left_tile.y
