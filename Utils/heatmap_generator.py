@@ -1,16 +1,11 @@
 from Types.tilemap import Tilemap
-from Types.vec2 import Vec2  # Assuming Vec2 has a magnitude() method
+from Types.vec2 import Vec2
 import os
-from DataAccess.i_data_access_handler import AreaTuple
-from Types.vec2 import Vec2  # Assuming Vec2 is defined elsewhere
+from Types.vec2 import Vec2
 import datetime
-from ForceProviders.i_force_provider import IForceProvider, Params
-from ForceProviders.traffic_force_provider import TrafficForceProvider
-import mercantile
 from dataclasses import dataclass
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize
 from Types.vec2 import Vec2
 from PIL import Image
 
@@ -19,39 +14,7 @@ from PIL import Image
 class Config:
     output_dir: str = "Outputs/Heatmaps"
     target_pixel_size: int = 4000
-
-
-# def generate_heatmap_image(cfg):
-#     os.makedirs(cfg.output_dir, exist_ok=True)
-
-#     num_x_tiles = cfg.vectormap[0].max_x_tile - cfg.vectormap[0].min_x_tile + 1
-#     num_y_tiles = cfg.vectormap[0].max_y_tile - cfg.vectormap[0].min_y_tile + 1
-
-#     force_magnitudes = np.zeros((num_y_tiles, num_x_tiles), dtype=np.float32)
-#     for (x, y), u in cfg.vectormap[0].items():
-#         v = cfg.vectormap[1][(x, y)]
-#         magnitude = np.sqrt(u**2 + v**2)
-#         force_magnitudes[y - cfg.vectormap[0].min_y_tile,
-#                          x - cfg.vectormap[0].min_x_tile] = magnitude
-
-#     normalized = 255 * (force_magnitudes - force_magnitudes.min()) / (np.ptp(force_magnitudes) + 1e-8)
-#     normalized = normalized.astype(np.uint8)
-
-#     from matplotlib.cm import viridis
-#     colored = viridis(normalized / 255.0)
-#     image_array = (colored[:, :, :3] * 255).astype(np.uint8)
-
-#     img = Image.fromarray(image_array)
-
-#     tile_size = max(cfg.target_pixel_size // max(num_x_tiles, num_y_tiles), 1)
-#     if tile_size > 1:
-#         img = img.resize((num_x_tiles * tile_size, num_y_tiles * tile_size), resample=Image.NEAREST)
-
-#     filename = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-heatmap.png"
-#     output_path = os.path.join(cfg.output_dir, filename)
-#     img.save(output_path)
-
-#     print(f"Heatmap saved to {output_path}")
+    color_map: str = 'jet'
 
 
 def generate_heatmap_image(vectormap: tuple[Tilemap[float], Tilemap[float]], cfg):
@@ -60,33 +23,23 @@ def generate_heatmap_image(vectormap: tuple[Tilemap[float], Tilemap[float]], cfg
     num_x_tiles = vectormap[0].max_x_tile - vectormap[0].min_x_tile + 1
     num_y_tiles = vectormap[0].max_y_tile - vectormap[0].min_y_tile + 1
 
-    # Initialize empty map
     force_magnitudes = np.zeros((num_y_tiles, num_x_tiles), dtype=np.float32)
 
-    # Fill magnitudes
-    for (x, y), u in cfg.vectormap[0].items():
-        v = cfg.vectormap[1][x, y]
+    for (x, y), u in vectormap[0].items():
+        v = vectormap[1][x, y]
         magnitude = np.sqrt(u**2 + v**2)
-        force_magnitudes[y - cfg.vectormap[0].min_y_tile,
-                         x - cfg.vectormap[0].min_x_tile] = magnitude
+        force_magnitudes[y - vectormap[0].min_y_tile,
+                         x - vectormap[0].min_x_tile] = magnitude
 
-    low, high = np.percentile(force_magnitudes[force_magnitudes > 0], [1, 99])
-    normalized = np.clip((force_magnitudes - low) / (high - low), 0, 1)
+    force_magnitudes /= force_magnitudes.max()
 
-    cmap = plt.get_cmap('inferno')  # great dynamic range
-    colored = cmap(normalized)
-    colored[..., 3] = (normalized > 0).astype(float)  # transparency for zero values
+    cmap = plt.get_cmap(cfg.color_map)
+    colored = cmap(force_magnitudes)
+    colored[..., 3] = (force_magnitudes > 0).astype(float)
+
     # img = Image.fromarray((colored * 255).astype(np.uint8), mode='RGBA')
     img = Image.fromarray((colored[:, :, :3] * 255).astype(np.uint8), mode='RGB')
 
-    # Apply colormap (e.g. 'plasma', 'viridis', 'inferno', 'jet')
-    # cmap = plt.get_cmap('plasma')
-    # colored = cmap(normalized)  # Returns RGBA values in range [0, 1]
-
-    # # Convert to 8-bit RGB image
-    # img = Image.fromarray((colored[:, :, :3] * 255).astype(np.uint8), mode='RGB')
-
-    # Optional scaling
     tile_size = max(cfg.target_pixel_size // max(num_x_tiles, num_y_tiles), 1)
     if tile_size > 1:
         img = img.resize(
@@ -94,7 +47,6 @@ def generate_heatmap_image(vectormap: tuple[Tilemap[float], Tilemap[float]], cfg
             resample=Image.NEAREST
         )
 
-    # Save image
     filename = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-heatmap.png"
     output_path = os.path.join(cfg.output_dir, filename)
     img.save(output_path)

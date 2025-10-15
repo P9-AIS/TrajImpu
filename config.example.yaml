@@ -7,10 +7,10 @@ postgresCfg:
 
 trafficForceProviderCfg:
   start_date: 2024-01-01
-  end_date: 2024-01-31
+  end_date: 2024-01-08
   sample_rate: 1
-  base_zoom: 22
-  target_zoom: 19
+  base_zoom: 19
+  target_zoom: 17
   area:
     bottom_left:
       lat: 54.622382
@@ -20,7 +20,14 @@ trafficForceProviderCfg:
       lon: 12.868355
   vessel_types: ['cargo', 'tanker']
   output_dir: "Outputs/Tilemaps"
+  sato_sigmas: [1, 2, 4,8]
+  gaussian_sigma: 16.0
+  low_percentile_cutoff: 1.0
+  high_percentile_cutoff: 99.0
+  sensitivity1: 3
+  sensitivity2: 2
 
 heatmapGeneratorCfg:
   output_dir: "Outputs/Heatmaps"
   target_pixel_size: 4000
+  color_map: 'jet' # Options: 'plasma', 'viridis', 'inferno', 'jet'

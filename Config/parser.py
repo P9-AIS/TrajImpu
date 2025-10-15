@@ -42,7 +42,13 @@ ConfigVisitorRegistry.register(
         vessel_types=data["vessel_types"],
         base_zoom=data["base_zoom"],
         target_zoom=data["target_zoom"],
-        output_dir=data.get("output_dir", "Outputs/Tilemaps")
+        output_dir=data["output_dir"],
+        sato_sigmas=data["sato_sigmas"],
+        gaussian_sigma=data["gaussian_sigma"],
+        low_percentile_cutoff=data["low_percentile_cutoff"],
+        high_percentile_cutoff=data["high_percentile_cutoff"],
+        sensitivity1=data["sensitivity1"],
+        sensitivity2=data["sensitivity2"],
     )
 )
 

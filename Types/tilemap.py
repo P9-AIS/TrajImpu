@@ -63,8 +63,11 @@ class Tilemap(Generic[T]):
 
         for (x, y), val in self.items():
             tile = mercantile.Tile(x=x, y=y, z=self.base_zoom)
-            parent = mercantile.parent(tile, zoom=target_zoom)
-            parent_counts[parent.x, parent.y] += val
+            if (tile.z == target_zoom):
+                parent_counts[x, y] += val
+            else:
+                parent = mercantile.parent(tile, zoom=target_zoom)
+                parent_counts[parent.x, parent.y] += val
 
         return parent_counts
 

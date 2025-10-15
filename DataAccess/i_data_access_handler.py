@@ -11,3 +11,7 @@ class IDataAccessHandler(ABC):
     @abstractmethod
     def get_ais_messages(self, dates: list[datetime.date], area: AreaTuple) -> list[AisMessageTuple]:
         pass
+
+    @abstractmethod
+    def get_ais_messages_no_stops(self, dates: list[datetime.date], area: AreaTuple) -> list[AisMessageTuple]:
+        pass

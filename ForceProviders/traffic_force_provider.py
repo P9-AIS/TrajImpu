@@ -1,9 +1,10 @@
+import matplotlib.pyplot as plt
 from DataAccess.i_data_access_handler import AreaTuple
 from ForceProviders.i_force_provider import IForceProvider
 from Types.tilemap import Tilemap
 from params import Params
 from Types.vec2 import Vec2
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from vessel_types import VesselType
 import datetime as dt
 import mercantile
@@ -12,6 +13,7 @@ import os
 import numpy as np
 from DataAccess.data_access_handler import DataAccessHandler
 from tqdm import tqdm
+from Utils.blur import chunked_gaussian_blur
 
 
 @dataclass
@@ -24,6 +26,12 @@ class Config:
     base_zoom: int
     target_zoom: int
     output_dir: str = "Outputs/Tilemaps"
+    sato_sigmas: list[int] = field(default_factory=lambda: [1, 2, 4, 8])
+    gaussian_sigma: float = 16.0
+    low_percentile_cutoff: float = 35.0
+    high_percentile_cutoff: float = 99.0
+    sensitivity1: float = 2.0
+    sensitivity2: float = 6.0
 
 
 class TrafficForceProvider(IForceProvider):
@@ -63,7 +71,7 @@ class TrafficForceProvider(IForceProvider):
             days.append(cur_date)
             cur_date = cur_date + dt.timedelta(self._cfg.sample_rate)
 
-        ais_messages = self._data_handler.get_ais_messages(days, self._cfg.area)
+        ais_messages = self._data_handler.get_ais_messages_no_stops(days, self._cfg.area)
 
         print(f"Pre-computing tiles counts at base zoom {self._cfg.base_zoom}")
 
@@ -77,7 +85,7 @@ class TrafficForceProvider(IForceProvider):
                            min_y_tile=top_right_tile.y, max_y_tile=bot_left_tile.y)
 
         for msg in tqdm(ais_messages, desc="Aggregating tiles"):
-            tile = mercantile.tile(msg.longitude, msg.latitude, zoom=self._cfg.base_zoom)
+            tile = mercantile.tile(msg[1], msg[0], zoom=self._cfg.base_zoom)
             tile_map.increment(tile.x, tile.y)
 
         print(f"Computed {len(tile_map)} unique tiles at zoom {self._cfg.base_zoom}")
@@ -102,16 +110,33 @@ class TrafficForceProvider(IForceProvider):
             idx_y = y - top_right_tile.y
             Z[idx_y, idx_x] = count
 
-        dz_dy, dz_dx = np.gradient(Z)
-        grad_mag = np.sqrt(dz_dx**2 + dz_dy**2)
-        vx = -dz_dx / (grad_mag + 1e-8)
-        vy = -dz_dy / (grad_mag + 1e-8)
-        Z_norm = (Z - Z.min()) / (Z.max() - Z.min())
-        vx *= Z_norm
-        vy *= Z_norm
+        from skimage.filters import sato
+        from scipy.ndimage import gaussian_filter
 
-        return (Tilemap.from_2d(vx, self._cfg.target_zoom, num_x_tiles, num_y_tiles),
-                Tilemap.from_2d(vy, self._cfg.target_zoom, num_x_tiles, num_y_tiles))
+        TrafficForceProvider._save_distribution_plots(Z, "Outputs/Distributions", low_cut=self._cfg.low_percentile_cutoff, high_cut=self._cfg.high_percentile_cutoff,
+                                                      sensitivity=self._cfg.sensitivity1, prefix="Z_distribution")
+
+        low, high = np.percentile(Z[Z > 0], [self._cfg.low_percentile_cutoff, self._cfg.high_percentile_cutoff])
+        Z_norm = np.clip((Z - low) / (high - low), 0, 1)
+        Z_norm = Z_norm ** (1 / self._cfg.sensitivity1)
+
+        # Apply vesselness filter (Sato) to enhance linear structures
+        Z_vessel = sato(Z_norm, sigmas=self._cfg.sato_sigmas, black_ridges=False)
+        Z_vessel /= Z_vessel.max()
+
+        Z_smooth = gaussian_filter(Z_vessel, sigma=self._cfg.gaussian_sigma)
+        Z_smooth /= Z_smooth.max()
+        Z_smooth = Z_smooth ** (1 / self._cfg.sensitivity2)
+
+        dz_dy, dz_dx = np.gradient(Z_smooth)
+        grad_mag = np.sqrt(dz_dx**2 + dz_dy**2) + 1e-8
+        vx = -dz_dx / grad_mag * Z_smooth
+        vy = -dz_dy / grad_mag * Z_smooth
+
+        return (
+            Tilemap.from_2d(vx, self._cfg.target_zoom, num_x_tiles, num_y_tiles),
+            Tilemap.from_2d(vy, self._cfg.target_zoom, num_x_tiles, num_y_tiles)
+        )
 
     @staticmethod
     def _get_tilemap_file_name(cfg: Config):
@@ -127,3 +152,51 @@ class TrafficForceProvider(IForceProvider):
         idx_y = active_tile.y - top_left_tile.y
 
         return self._vector_map[idx_y][idx_x]
+
+    @staticmethod
+    def _save_distribution_plots(Z, output_dir, low_cut=2, high_cut=99.9, sensitivity=3, prefix="Z_distribution"):
+        os.makedirs(output_dir, exist_ok=True)
+
+        values = Z[Z > 0].flatten()
+        low, high = np.percentile(values, [low_cut, high_cut])
+        Z_norm = np.clip((Z - low) / (high - low), 0, 1)
+        Z_norm = Z_norm ** (1 / sensitivity)
+
+        fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+
+        # 1️⃣ Histogram (log freq)
+        axs[0].hist(values, bins=300, log=True, color='steelblue', alpha=0.8)
+        axs[0].axvline(low, color='orange', linestyle='--', label=f"low {low_cut}%")
+        axs[0].axvline(high, color='red', linestyle='--', label=f"high {high_cut}%")
+        axs[0].set_title("Original value distribution (log freq)")
+        axs[0].set_xlabel("Tile value")
+        axs[0].set_ylabel("Frequency (log)")
+        axs[0].legend()
+        axs[0].grid(alpha=0.3)
+
+        # 2️⃣ CDF (Cumulative Distribution)
+        sorted_vals = np.sort(values)
+        cdf = np.linspace(0, 100, len(sorted_vals))
+        axs[1].plot(sorted_vals, cdf, color='steelblue')
+        axs[1].axvline(low, color='orange', linestyle='--', label=f"low {low_cut}%")
+        axs[1].axvline(high, color='red', linestyle='--', label=f"high {high_cut}%")
+        axs[1].set_title("Cumulative Distribution (CDF)")
+        axs[1].set_xlabel("Tile value")
+        axs[1].set_ylabel("Percentile")
+        axs[1].legend()
+        axs[1].grid(alpha=0.3)
+
+        # 3️⃣ Histogram after normalization
+        axs[2].hist(Z_norm[Z_norm > 0].flatten(), bins=300, color='green', alpha=0.8)
+        axs[2].set_title(f"After normalization (sensitivity={sensitivity})")
+        axs[2].set_xlabel("Normalized value (0–1)")
+        axs[2].set_ylabel("Frequency")
+        axs[2].grid(alpha=0.3)
+
+        plt.tight_layout()
+
+        # 4️⃣ Save
+        out_path = os.path.join(output_dir, f"{dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-{prefix}.png")
+        plt.savefig(out_path, dpi=200)
+        plt.close(fig)
+        print(f"📊 Distribution plot saved to: {out_path}")
