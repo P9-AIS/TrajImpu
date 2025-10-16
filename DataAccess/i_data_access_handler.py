@@ -2,16 +2,18 @@ from collections import namedtuple
 from abc import ABC, abstractmethod
 import datetime
 
-AisMessageTuple = namedtuple('AisMessageTuple', ['timestamp', 'lat', 'lon', 'sog', 'cog', 'vessel_type'])
-AreaTuple = namedtuple('AreaTuple', ['bot_left', 'top_right'])
+from Types.area import Area
+
+AisMessageTuple = namedtuple('AisMessageTuple', ['timestamp', 'lon', 'lat', 'sog', 'cog', 'vessel_type'])
+DepthTuple = namedtuple('DepthTuple', ['lon', 'lat', 'depth'])
 
 
 class IDataAccessHandler(ABC):
 
     @abstractmethod
-    def get_ais_messages(self, dates: list[datetime.date], area: AreaTuple) -> list[AisMessageTuple]:
+    def get_ais_messages_no_stops(self, dates: list[datetime.date], area: Area) -> list[AisMessageTuple]:
         pass
 
     @abstractmethod
-    def get_ais_messages_no_stops(self, dates: list[datetime.date], area: AreaTuple) -> list[AisMessageTuple]:
+    def get_depths(self, area: Area) -> tuple[int, list[DepthTuple]]:
         pass

@@ -1,5 +1,6 @@
+import math
 import matplotlib.pyplot as plt
-from DataAccess.i_data_access_handler import AreaTuple
+from Types.area import Area
 from ForceProviders.i_force_provider import IForceProvider
 from Types.tilemap import Tilemap
 from params import Params
@@ -7,13 +8,13 @@ from Types.vec2 import Vec2
 from dataclasses import dataclass, field
 from vessel_types import VesselType
 import datetime as dt
-import mercantile
 import pickle
 import os
 import numpy as np
 from DataAccess.data_access_handler import DataAccessHandler
 from tqdm import tqdm
-from Utils.blur import chunked_gaussian_blur
+from skimage.filters import sato
+from scipy.ndimage import gaussian_filter
 
 
 @dataclass
@@ -21,10 +22,10 @@ class Config:
     start_date: dt.date
     end_date: dt.date
     sample_rate: int
-    area: AreaTuple
+    area: Area
     vessel_types: list[VesselType]
-    base_zoom: int
-    target_zoom: int
+    base_tile_size_m: int = 50
+    down_scale_factor: int = 1
     output_dir: str = "Outputs/Tilemaps"
     sato_sigmas: list[int] = field(default_factory=lambda: [1, 2, 4, 8])
     gaussian_sigma: float = 16.0
@@ -58,8 +59,10 @@ class TrafficForceProvider(IForceProvider):
             print(f"Saved {len(high_res_tiles)} tiles to '{file_name}'\n")
             tile_map: Tilemap = high_res_tiles
 
-        tile_map = tile_map.downscale_tile_map(self._cfg.target_zoom)
-        print(f"Downsampled tile map to zoom {self._cfg.target_zoom}, now contains {len(tile_map)} tiles")
+        tile_map = tile_map.downscale_tile_map(self._cfg.down_scale_factor)
+
+        print(
+            f"Downsampled tile map to {self._cfg.base_tile_size_m * math.sqrt(self._cfg.down_scale_factor)}m, now contains {len(tile_map)} tiles")
 
         self._vectormap = self._get_vector_map(tile_map)
 
@@ -73,45 +76,22 @@ class TrafficForceProvider(IForceProvider):
 
         ais_messages = self._data_handler.get_ais_messages_no_stops(days, self._cfg.area)
 
-        print(f"Pre-computing tiles counts at base zoom {self._cfg.base_zoom}")
+        print(f"Creating {self._cfg.base_tile_size_m}m tile map from {len(ais_messages)} AIS messages")
 
-        bot_left_tile = mercantile.tile(self._cfg.area.bot_left.lon,
-                                        self._cfg.area.bot_left.lat, zoom=self._cfg.base_zoom)
-        top_right_tile = mercantile.tile(self._cfg.area.top_right.lon,
-                                         self._cfg.area.top_right.lat, zoom=self._cfg.base_zoom)
+        tile_map = Tilemap(self._cfg.base_tile_size_m, self._cfg.area)
 
-        tile_map = Tilemap(self._cfg.base_zoom,
-                           min_x_tile=bot_left_tile.x, max_x_tile=top_right_tile.x,
-                           min_y_tile=top_right_tile.y, max_y_tile=bot_left_tile.y)
-
-        for msg in tqdm(ais_messages, desc="Aggregating tiles"):
-            tile = mercantile.tile(msg[1], msg[0], zoom=self._cfg.base_zoom)
-            tile_map.increment(tile.x, tile.y)
-
-        print(f"Computed {len(tile_map)} unique tiles at zoom {self._cfg.base_zoom}")
+        for (lon, lat) in tqdm(ais_messages, desc="Aggregating tiles"):
+            tile_map.increment_espg4326(lon, lat)
 
         return tile_map
 
     def _get_vector_map(self, tile_map):
         print(f"Creating vector field from tile map")
 
-        bot_left_tile = mercantile.tile(self._cfg.area.bot_left.lon,
-                                        self._cfg.area.bot_left.lat, zoom=self._cfg.target_zoom)
-        top_right_tile = mercantile.tile(self._cfg.area.top_right.lon,
-                                         self._cfg.area.top_right.lat, zoom=self._cfg.target_zoom)
-
-        num_x_tiles = top_right_tile.x - bot_left_tile.x + 1
-        num_y_tiles = bot_left_tile.y - top_right_tile.y + 1
-
-        Z = np.zeros((num_y_tiles, num_x_tiles), dtype=np.float32)
+        Z = np.zeros(tile_map.get_dimensions(), dtype=np.float32)
 
         for (x, y), count in tqdm(tile_map.items(), total=len(tile_map), desc="Building vector field"):
-            idx_x = x - bot_left_tile.x
-            idx_y = y - top_right_tile.y
-            Z[idx_y, idx_x] = count
-
-        from skimage.filters import sato
-        from scipy.ndimage import gaussian_filter
+            Z[x, y] = count
 
         TrafficForceProvider._save_distribution_plots(Z, "Outputs/Distributions", low_cut=self._cfg.low_percentile_cutoff, high_cut=self._cfg.high_percentile_cutoff,
                                                       sensitivity=self._cfg.sensitivity1, prefix="Z_distribution")
@@ -134,24 +114,21 @@ class TrafficForceProvider(IForceProvider):
         vy = -dz_dy / grad_mag * Z_smooth
 
         return (
-            Tilemap.from_2d(vx, self._cfg.target_zoom, num_x_tiles, num_y_tiles),
-            Tilemap.from_2d(vy, self._cfg.target_zoom, num_x_tiles, num_y_tiles)
+            Tilemap.from_2d(vx, self._cfg.base_tile_size_m, self._cfg.area),
+            Tilemap.from_2d(vy, self._cfg.base_tile_size_m, self._cfg.area)
         )
 
     @staticmethod
     def _get_tilemap_file_name(cfg: Config):
-        return (f"{cfg.output_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.area=}-{cfg.sample_rate=}-{cfg.base_zoom=}.pkl")
+        return (f"{cfg.output_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.sample_rate=}-{cfg.base_tile_size_m=}.pkl")
 
     def get_force(self, p: Params) -> Vec2:
-        top_left_tile = mercantile.tile(self._cfg.area.top_right.lon,
-                                        self._cfg.area.bot_left.lat, zoom=self._cfg.target_zoom)
+        x, y = self._vector_map[0].tile_from_espg4326(p.lon, p.lat)
 
-        active_tile = mercantile.tile(p.lon, p.lat, zoom=self._cfg.target_zoom)
+        x_force = self._vector_map[0][x, y]
+        y_force = self._vector_map[1][x, y]
 
-        idx_x = active_tile.x - top_left_tile.x
-        idx_y = active_tile.y - top_left_tile.y
-
-        return self._vector_map[idx_y][idx_x]
+        return Vec2(x_force, y_force)
 
     @staticmethod
     def _save_distribution_plots(Z, output_dir, low_cut=2, high_cut=99.9, sensitivity=3, prefix="Z_distribution"):

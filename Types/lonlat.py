@@ -2,6 +2,6 @@ from dataclasses import dataclass
 
 
 @dataclass
-class LatLon:
-    lat: float
+class LonLat:
     lon: float
+    lat: float

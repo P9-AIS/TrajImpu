@@ -2,11 +2,12 @@ import csv
 from DataAccess.i_data_access_handler import (
     IDataAccessHandler,
     AisMessageTuple,
-    AreaTuple,
 )
 import datetime
 # Import the tqdm library
 from tqdm import tqdm
+
+from Types.area import Area
 
 
 class MockDataAccessHandler(IDataAccessHandler):
@@ -14,7 +15,7 @@ class MockDataAccessHandler(IDataAccessHandler):
         self.csv_file = csv_file
 
     def get_ais_messages(
-        self, dates: list[datetime.date], area: AreaTuple
+        self, dates: list[datetime.date], area: Area
     ) -> list[AisMessageTuple]:
         results: list[AisMessageTuple] = []
 

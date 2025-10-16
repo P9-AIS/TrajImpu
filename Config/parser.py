@@ -1,9 +1,9 @@
 import yaml
 from Config.visitor import ConfigVisitorRegistry
-from DataAccess.i_data_access_handler import AreaTuple
 from DataAccess.postgres_connection import Config as PostgresConfig
 from ForceProviders.traffic_force_provider import Config as TrafficForceProviderConfig
-from Types.latlon import LatLon
+from Types.lonlat import LonLat
+from Types.area import Area
 from Utils.heatmap_generator import Config as HeatmapGeneratorConfig
 from dataclasses import dataclass
 
@@ -38,10 +38,10 @@ ConfigVisitorRegistry.register(
         start_date=data["start_date"],
         end_date=data["end_date"],
         sample_rate=data["sample_rate"],
-        area=ConfigVisitorRegistry.visit(AreaTuple, data["area"]),
+        area=ConfigVisitorRegistry.visit(Area, data["area"]),
         vessel_types=data["vessel_types"],
-        base_zoom=data["base_zoom"],
-        target_zoom=data["target_zoom"],
+        base_tile_size_m=data["base_tile_size_m"],
+        down_scale_factor=data["down_scale_factor"],
         output_dir=data["output_dir"],
         sato_sigmas=data["sato_sigmas"],
         gaussian_sigma=data["gaussian_sigma"],
@@ -58,12 +58,12 @@ ConfigVisitorRegistry.register(
 )
 
 ConfigVisitorRegistry.register(
-    AreaTuple,
-    lambda data: AreaTuple(ConfigVisitorRegistry.visit(LatLon, data["bottom_left"]),
-                           ConfigVisitorRegistry.visit(LatLon, data["top_right"]))
+    Area,
+    lambda data: Area(ConfigVisitorRegistry.visit(LonLat, data["bottom_left"]),
+                      ConfigVisitorRegistry.visit(LonLat, data["top_right"]))
 )
 
 ConfigVisitorRegistry.register(
-    LatLon,
-    lambda data: LatLon(**data)
+    LonLat,
+    lambda data: LonLat(**data)
 )

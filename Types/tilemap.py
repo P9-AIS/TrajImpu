@@ -1,81 +1,116 @@
 from collections import defaultdict
 
-import mercantile
 from typing import Generic, TypeVar, Tuple
+import math
+from Types.area import Area
+from Utils.geo_converter import GeoConverter as gc
+
 
 T = TypeVar("Numeric", int, float)
 
 
 class Tilemap(Generic[T]):
-    tilemap: dict[int, T]
-    base_zoom: int
-    min_x_tile: int
-    max_x_tile: int
-    min_y_tile: int
-    max_y_tile: int
+    _tilemap: dict[int, T]
+    _tile_size: int
+    _wgs84_bounds: Area
+    _dim_x: int
+    _dim_y: int
+    _E0: float
+    _N0: float
 
-    def __init__(self, base_zoom: int, min_x_tile: int, max_x_tile: int, min_y_tile: int, max_y_tile: int):
-        self.base_zoom = base_zoom
-        self.tilemap = defaultdict(int)
-        self.min_x_tile = min_x_tile
-        self.max_x_tile = max_x_tile
-        self.min_y_tile = min_y_tile
-        self.max_y_tile = max_y_tile
+    def __init__(self, tile_size: int, wgs84_bounds: Area):
+        self._tile_size = tile_size
+        self._tilemap = defaultdict(int)
+
+        self._wgs84_bounds = wgs84_bounds
+
+        offset_x, offset_y = gc.epsg3034_to_cell(
+            *gc.espg4326_to_epsg3034(wgs84_bounds.bottom_left.lon, wgs84_bounds.bottom_left.lat), 0, 0)
+        self._E0, self._N0 = gc.cell_to_epsg3034(offset_x, offset_y, 0, 0)
+
+        max_x, max_y = gc.epsg3034_to_cell(
+            *gc.espg4326_to_epsg3034(wgs84_bounds.top_right.lon, wgs84_bounds.top_right.lat), self._E0, self._N0)
+        self._dim_x, self._dim_y = max_x + 1, max_y + 1
 
     def __getitem__(self, key: tuple[int, int]) -> T:
-        x, y = key
-        packed = (x << 32) | y
-        return self.tilemap[packed]
+        return self._tilemap[Tilemap._tile_to_key(*key)]
 
     def __setitem__(self, key: tuple[int, int], value: T):
-        x, y = key
-        packed = (x << 32) | y
-        self.tilemap[packed] = value
+        self._tilemap[Tilemap._tile_to_key(*key)] = value
 
     def __len__(self) -> int:
-        return len(self.tilemap)
+        return len(self._tilemap)
+
+    def get_tile_size(self) -> int:
+        return self._tile_size
+
+    def get_dimensions(self) -> Tuple[int, int]:
+        return self._dim_x, self._dim_y
 
     def items(self):
-        for packed_key, val in self.tilemap.items():
-            x = (packed_key >> 32) & 0xFFFFFFFF
-            y = packed_key & 0xFFFFFFFF
+        for key, val in self._tilemap.items():
+            x, y = Tilemap._key_to_tile(key)
             yield (x, y), val
 
     def increment(self, x, y, n=1):
-        key = (x << 32) | y
-        self.tilemap[key] = self.tilemap.get(key, 0) + n
+        key = Tilemap._tile_to_key(x, y)
+        self._tilemap[key] = self._tilemap.get(key, 0) + n
 
-    def downscale_tile_map(self, target_zoom: int):
-        if target_zoom > self.base_zoom:
-            raise ValueError(f"Target zoom ({target_zoom}) cannot be greater than base zoom ({self.base_zoom})")
+    def tile_from_espg4326(self, lon, lat) -> Tuple[int, int]:
+        x, y = gc.epsg3034_to_cell(*gc.espg4326_to_epsg3034(lon, lat), self._E0, self._N0)
+        return x, y
 
-        bot_left_tile = mercantile.Tile(x=self.min_x_tile, y=self.max_y_tile, z=self.base_zoom)
-        top_right_tile = mercantile.Tile(x=self.max_x_tile, y=self.min_y_tile, z=self.base_zoom)
+    def increment_espg4326(self, lon, lat, n=1):
+        x, y = self.tile_from_espg4326(lon, lat)
+        self.increment(x, y, n)
 
-        bot_left_coord = mercantile.ul(bot_left_tile)
-        top_right_coord = mercantile.ul(top_right_tile)
+    def downscale_tile_map(self, factor: int) -> "Tilemap[T]":
+        if factor < 1:
+            raise ValueError(f"Downscale factor must be >= 1, got {factor}")
 
-        new_bot_left_tile = mercantile.tile(bot_left_coord.lng, bot_left_coord.lat, zoom=target_zoom)
-        new_top_right_tile = mercantile.tile(top_right_coord.lng, top_right_coord.lat, zoom=target_zoom)
+        if factor == 1:
+            return self
 
-        parent_counts = Tilemap(base_zoom=target_zoom, min_x_tile=new_bot_left_tile.x, max_x_tile=new_top_right_tile.x,
-                                min_y_tile=new_top_right_tile.y, max_y_tile=new_bot_left_tile.y)
+        if math.sqrt(factor) % 1 != 0:
+            raise ValueError(f"Downscale factor must be a perfect square, got {factor}")
+
+        tile_scale_factor = int(math.sqrt(factor))
+
+        if self._dim_x % tile_scale_factor != 0 or self._dim_y % tile_scale_factor != 0:
+            print(
+                f"Warning: Tilemap dimensions ({self._dim_x}, {self._dim_y}) are not divisible by downscale factor {tile_scale_factor}")
+            print(f"Resulting tilemap will be cropped to ({self._dim_x // tile_scale_factor}, "
+                  f"{self._dim_y // tile_scale_factor})")
+
+        new_tilemap = Tilemap(tile_size=self._tile_size * tile_scale_factor)
 
         for (x, y), val in self.items():
-            tile = mercantile.Tile(x=x, y=y, z=self.base_zoom)
-            if (tile.z == target_zoom):
-                parent_counts[x, y] += val
-            else:
-                parent = mercantile.parent(tile, zoom=target_zoom)
-                parent_counts[parent.x, parent.y] += val
+            new_x = x // tile_scale_factor
+            new_y = y // tile_scale_factor
 
-        return parent_counts
+            if new_x > (self._dim_x // tile_scale_factor) - 1 or new_y > (self._dim_y // tile_scale_factor) - 1:
+                continue
+
+            new_tilemap[new_x, new_y] += val
+
+        return new_tilemap
 
     @staticmethod
-    def from_2d(tile_array: list[list[T]], base_zoom: int, x_offset: int, y_offset: int) -> "Tilemap[T]":
-        tilemap = Tilemap(base_zoom, x_offset, x_offset + len(tile_array[0]), y_offset, y_offset + len(tile_array))
+    def from_2d(tile_array: list[list[T]], tile_size: int, wgs84_bounds: Area) -> "Tilemap[T]":
+        tilemap = Tilemap(tile_size, wgs84_bounds)
         for y, row in enumerate(tile_array):
             for x, val in enumerate(row):
                 if val != 0:
-                    tilemap[x + x_offset, y + y_offset] = val
+                    tilemap[x, y] = val
         return tilemap
+
+    @staticmethod
+    def _tile_to_key(x: int, y: int) -> int:
+        key = (x << 32) | y
+        return key
+
+    @staticmethod
+    def _key_to_tile(key: int) -> Tuple[int, int]:
+        x = (key >> 32) & 0xFFFFFFFF
+        y = key & 0xFFFFFFFF
+        return x, y
