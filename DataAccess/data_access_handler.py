@@ -35,8 +35,18 @@ class DataAccessHandler(IDataAccessHandler):
         JOIN ships s
             ON cur.vessel_id = s.vessel_id
         WHERE dd.year_no = %s AND dd.month_no = %s AND dd.day_no = %s
-        AND cur.lat BETWEEN %s AND %s
-        AND cur.lon BETWEEN %s AND %s
+        AND cur.lon BETWEEN -20 AND 40
+        AND cur.lat BETWEEN 30 AND 80
+        AND st_contains(
+            st_geomfromtext(
+                %s,
+                3034
+            ), 
+            ST_Transform(
+                ST_SetSRID(ST_MakePoint(cur.lon, cur.lat), 4326),
+                3034
+            )
+        )
         AND (
             cur.sog > %s
             OR cur_td.hour_no - prev_td.hour_no > %s
@@ -49,6 +59,13 @@ class DataAccessHandler(IDataAccessHandler):
 
         print(f"Fetching AIS data for {len(dates)} days in area {area}...")
 
+        polygon_wkt = \
+            f"POLYGON(({area.bottom_left.E} {area.bottom_left.N}, " + \
+            f"{area.bottom_left.E} {area.top_right.N}, " + \
+            f"{area.top_right.E} {area.top_right.N}, " + \
+            f"{area.top_right.E} {area.bottom_left.N}, " + \
+            f"{area.bottom_left.E} {area.bottom_left.N}))"
+
         speed_threshold = 1  # knots
         time_threshold = 1.5  # hours
         distance_threshold = 2000  # meters
@@ -59,8 +76,7 @@ class DataAccessHandler(IDataAccessHandler):
                     date.year,
                     date.month,
                     date.day,
-                    area.bottom_left.lat, area.top_right.lat,
-                    area.bottom_left.lon, area.top_right.lon,
+                    polygon_wkt,
                     speed_threshold,
                     time_threshold,
                     distance_threshold
@@ -71,7 +87,6 @@ class DataAccessHandler(IDataAccessHandler):
                 if day_results:
                     all_results.extend(day_results)
 
-                # Update progress bar with number of records fetched so far
                 pbar.set_postfix({"records_so_far": len(all_results)})
 
         print(f"Finished fetching data. Total records: {len(all_results)}")

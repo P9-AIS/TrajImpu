@@ -12,24 +12,23 @@ T = TypeVar("Numeric", int, float)
 class Tilemap(Generic[T]):
     _tilemap: dict[int, T]
     _tile_size: int
-    _wgs84_bounds: Area
+    _espg3034_bounds: Area
     _dim_x: int
     _dim_y: int
     _E0: float
     _N0: float
 
-    def __init__(self, tile_size: int, wgs84_bounds: Area):
+    def __init__(self, tile_size: int, espg3034_bounds: Area):
         self._tile_size = tile_size
         self._tilemap = defaultdict(int)
 
-        self._wgs84_bounds = wgs84_bounds
+        self._espg3034_bounds = espg3034_bounds
 
-        offset_x, offset_y = gc.epsg3034_to_cell(
-            *gc.espg4326_to_epsg3034(wgs84_bounds.bottom_left.lon, wgs84_bounds.bottom_left.lat), 0, 0)
+        offset_x, offset_y = gc.epsg3034_to_cell(espg3034_bounds.bottom_left.E, espg3034_bounds.bottom_left.N, 0, 0)
         self._E0, self._N0 = gc.cell_to_epsg3034(offset_x, offset_y, 0, 0)
 
-        max_x, max_y = gc.epsg3034_to_cell(
-            *gc.espg4326_to_epsg3034(wgs84_bounds.top_right.lon, wgs84_bounds.top_right.lat), self._E0, self._N0)
+        max_x, max_y = gc.epsg3034_to_cell(espg3034_bounds.top_right.E,
+                                           espg3034_bounds.top_right.N, self._E0, self._N0)
         self._dim_x, self._dim_y = max_x + 1, max_y + 1
 
     def __getitem__(self, key: tuple[int, int]) -> T:
@@ -82,7 +81,7 @@ class Tilemap(Generic[T]):
             print(f"Resulting tilemap will be cropped to ({self._dim_x // tile_scale_factor}, "
                   f"{self._dim_y // tile_scale_factor})")
 
-        new_tilemap = Tilemap(tile_size=self._tile_size * tile_scale_factor)
+        new_tilemap = Tilemap(tile_size=self._tile_size * tile_scale_factor, espg3034_bounds=self._espg3034_bounds)
 
         for (x, y), val in self.items():
             new_x = x // tile_scale_factor

@@ -2,7 +2,7 @@ import yaml
 from Config.visitor import ConfigVisitorRegistry
 from DataAccess.postgres_connection import Config as PostgresConfig
 from ForceProviders.traffic_force_provider import Config as TrafficForceProviderConfig
-from Types.lonlat import LonLat
+from Types.espg3034_coord import Espg3034Coord
 from Types.area import Area
 from Utils.heatmap_generator import Config as HeatmapGeneratorConfig
 from dataclasses import dataclass
@@ -59,11 +59,11 @@ ConfigVisitorRegistry.register(
 
 ConfigVisitorRegistry.register(
     Area,
-    lambda data: Area(ConfigVisitorRegistry.visit(LonLat, data["bottom_left"]),
-                      ConfigVisitorRegistry.visit(LonLat, data["top_right"]))
+    lambda data: Area(ConfigVisitorRegistry.visit(Espg3034Coord, data["bottom_left"]),
+                      ConfigVisitorRegistry.visit(Espg3034Coord, data["top_right"]))
 )
 
 ConfigVisitorRegistry.register(
-    LonLat,
-    lambda data: LonLat(**data)
+    Espg3034Coord,
+    lambda data: Espg3034Coord(**data)
 )

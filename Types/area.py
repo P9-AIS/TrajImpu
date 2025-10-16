@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 
-from Types.lonlat import LonLat
+from Types.espg3034_coord import Espg3034Coord
 
 
 @dataclass
 class Area:
-    bottom_left: LonLat
-    top_right: LonLat
+    bottom_left: Espg3034Coord
+    top_right: Espg3034Coord

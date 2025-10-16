@@ -7,17 +7,17 @@ postgresCfg:
 
 trafficForceProviderCfg:
   start_date: 2024-01-01
-  end_date: 2024-01-08
+  end_date: 2024-01-02
   sample_rate: 1
-  base_zoom: 19
-  target_zoom: 17
+  base_tile_size_m: 50
+  down_scale_factor: 16
   area:
     bottom_left:
-      lat: 54.622382
-      lon:  7.269879
+      E: 3592900.0
+      N: 3055500.0
     top_right:
-      lat: 57.750526
-      lon: 12.868355
+      E: 4399500.0
+      N: 3475350.0
   vessel_types: ['cargo', 'tanker']
   output_dir: "Outputs/Tilemaps"
   sato_sigmas: [1, 2, 4,8]
