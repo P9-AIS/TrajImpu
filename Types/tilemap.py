@@ -24,12 +24,12 @@ class Tilemap(Generic[T]):
 
         self._espg3034_bounds = espg3034_bounds
 
-        offset_x, offset_y = gc.epsg3034_to_cell(espg3034_bounds.bottom_left.E, espg3034_bounds.bottom_left.N, 0, 0)
-        self._E0, self._N0 = gc.cell_to_epsg3034(offset_x, offset_y, 0, 0)
+        offset_x, offset_y = gc.epsg3034_to_cell(espg3034_bounds.bottom_left.E,
+                                                 espg3034_bounds.bottom_left.N, 0, 0, tile_size)
+        self._E0, self._N0 = gc.cell_to_epsg3034(offset_x, offset_y, 0, 0, tile_size)
 
-        max_x, max_y = gc.epsg3034_to_cell(espg3034_bounds.top_right.E,
-                                           espg3034_bounds.top_right.N, self._E0, self._N0)
-        self._dim_x, self._dim_y = max_x + 1, max_y + 1
+        self._dim_x, self._dim_y = gc.epsg3034_to_cell(espg3034_bounds.top_right.E,
+                                                       espg3034_bounds.top_right.N, self._E0, self._N0, tile_size)
 
     def __getitem__(self, key: tuple[int, int]) -> T:
         return self._tilemap[Tilemap._tile_to_key(*key)]
@@ -56,7 +56,7 @@ class Tilemap(Generic[T]):
         self._tilemap[key] = self._tilemap.get(key, 0) + n
 
     def tile_from_espg4326(self, lon, lat) -> Tuple[int, int]:
-        x, y = gc.epsg3034_to_cell(*gc.espg4326_to_epsg3034(lon, lat), self._E0, self._N0)
+        x, y = gc.epsg3034_to_cell(*gc.espg4326_to_epsg3034(lon, lat), self._E0, self._N0, self._tile_size)
         return x, y
 
     def increment_espg4326(self, lon, lat, n=1):

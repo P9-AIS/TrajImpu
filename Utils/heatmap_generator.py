@@ -20,16 +20,14 @@ class Config:
 def generate_heatmap_image(vectormap: tuple[Tilemap[float], Tilemap[float]], cfg):
     os.makedirs(cfg.output_dir, exist_ok=True)
 
-    num_x_tiles = vectormap[0].max_x_tile - vectormap[0].min_x_tile + 1
-    num_y_tiles = vectormap[0].max_y_tile - vectormap[0].min_y_tile + 1
+    num_x_tiles, num_y_tiles = vectormap[0].get_dimensions()
 
     force_magnitudes = np.zeros((num_y_tiles, num_x_tiles), dtype=np.float32)
 
     for (x, y), u in vectormap[0].items():
         v = vectormap[1][x, y]
         magnitude = np.sqrt(u**2 + v**2)
-        force_magnitudes[y - vectormap[0].min_y_tile,
-                         x - vectormap[0].min_x_tile] = magnitude
+        force_magnitudes[y, x] = magnitude
 
     force_magnitudes /= force_magnitudes.max()
 
