@@ -27,7 +27,7 @@ def generate_heatmap_image(vectormap: tuple[Tilemap[float], Tilemap[float]], cfg
     for (x, y), u in vectormap[0].items():
         v = vectormap[1][x, y]
         magnitude = np.sqrt(u**2 + v**2)
-        force_magnitudes[y, x] = magnitude
+        force_magnitudes[num_y_tiles - y - 1, x] = magnitude
 
     force_magnitudes /= force_magnitudes.max()
 

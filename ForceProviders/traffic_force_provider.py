@@ -70,7 +70,7 @@ class TrafficForceProvider(IForceProvider):
         days: list[dt.date] = []
 
         cur_date = self._cfg.start_date
-        while cur_date < self._cfg.end_date:
+        while cur_date <= self._cfg.end_date:
             days.append(cur_date)
             cur_date = cur_date + dt.timedelta(self._cfg.sample_rate)
 
@@ -88,10 +88,11 @@ class TrafficForceProvider(IForceProvider):
     def _get_vector_map(self, tile_map):
         print(f"Creating vector field from tile map")
 
-        Z = np.zeros(tile_map.get_dimensions(), dtype=np.float32)
+        dim_x, dim_y = tile_map.get_dimensions()
+        Z = np.zeros((dim_y, dim_x), dtype=np.float32)
 
         for (x, y), count in tqdm(tile_map.items(), total=len(tile_map), desc="Building vector field"):
-            Z[x, y] = count
+            Z[y, x] = count
 
         TrafficForceProvider._save_distribution_plots(Z, "Outputs/Distributions", low_cut=self._cfg.low_percentile_cutoff, high_cut=self._cfg.high_percentile_cutoff,
                                                       sensitivity=self._cfg.sensitivity1, prefix="Z_distribution")
@@ -114,8 +115,8 @@ class TrafficForceProvider(IForceProvider):
         vy = -dz_dy / grad_mag * Z_smooth
 
         return (
-            Tilemap.from_2d(vx, self._cfg.base_tile_size_m, self._cfg.area),
-            Tilemap.from_2d(vy, self._cfg.base_tile_size_m, self._cfg.area)
+            Tilemap.from_2d(vx, tile_map.get_tile_size(), self._cfg.area),
+            Tilemap.from_2d(vy, tile_map.get_tile_size(), self._cfg.area)
         )
 
     @staticmethod
