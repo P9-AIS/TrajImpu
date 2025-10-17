@@ -6,7 +6,6 @@ from Types.tilemap import Tilemap
 from params import Params
 from Types.vec2 import Vec2
 from dataclasses import dataclass, field
-from vessel_types import VesselType
 import datetime as dt
 import pickle
 import os
@@ -19,15 +18,9 @@ from scipy.ndimage import gaussian_filter
 
 @dataclass
 class Config:
-    start_date: dt.date
-    end_date: dt.date
-    sample_rate: int
     area: Area
-    vessel_types: list[VesselType]
-    base_tile_size_m: int = 50
     down_scale_factor: int = 1
     output_dir: str = "Outputs/Tilemaps"
-    sato_sigmas: list[int] = field(default_factory=lambda: [1, 2, 4, 8])
     gaussian_sigma: float = 16.0
     low_percentile_cutoff: float = 35.0
     high_percentile_cutoff: float = 99.0
@@ -35,7 +28,7 @@ class Config:
     sensitivity2: float = 6.0
 
 
-class TrafficForceProvider(IForceProvider):
+class DepthForceProvider(IForceProvider):
     _vectormap: tuple[Tilemap[float], Tilemap[float]]
     _cfg: Config
     _data_handler: DataAccessHandler
@@ -59,7 +52,7 @@ class TrafficForceProvider(IForceProvider):
             print(f"Saved {len(high_res_tiles)} tiles to '{file_name}'\n")
             tile_map: Tilemap = high_res_tiles
 
-        tile_map = tile_map.downscale_tile_map(self._cfg.down_scale_factor)
+        tile_map = tile_map.downscale_tile_map(self._cfg.down_scale_factor, min)
 
         print(
             f"Downsampled tile map to {self._cfg.base_tile_size_m * math.sqrt(self._cfg.down_scale_factor)}m, now contains {len(tile_map)} tiles")
@@ -67,21 +60,14 @@ class TrafficForceProvider(IForceProvider):
         self._vectormap = self._get_vector_map(tile_map)
 
     def _get_tile_map(self):
-        days: list[dt.date] = []
+        tile_size, depth_messages = self._data_handler.get_depths(self._cfg.area)
 
-        cur_date = self._cfg.start_date
-        while cur_date <= self._cfg.end_date:
-            days.append(cur_date)
-            cur_date = cur_date + dt.timedelta(self._cfg.sample_rate)
+        print(f"Creating {tile_size}m tile map from {len(depth_messages)} depth messages")
 
-        ais_messages = self._data_handler.get_ais_messages_no_stops(days, self._cfg.area)
+        tile_map = Tilemap(tile_size, self._cfg.area)
 
-        print(f"Creating {self._cfg.base_tile_size_m}m tile map from {len(ais_messages)} AIS messages")
-
-        tile_map = Tilemap(self._cfg.base_tile_size_m, self._cfg.area)
-
-        for (lon, lat) in tqdm(ais_messages, desc="Aggregating tiles"):
-            tile_map.increment_espg4326(lon, lat)
+        for (E, N, depth) in tqdm(depth_messages, desc="Aggregating tiles"):
+            tile_map.update_tile_espg3034(E, N, lambda old_val: min(old_val, depth))
 
         return tile_map
 
@@ -94,18 +80,14 @@ class TrafficForceProvider(IForceProvider):
         for (x, y), count in tqdm(tile_map.items(), total=len(tile_map), desc="Building vector field"):
             Z[y, x] = count
 
-        TrafficForceProvider._save_distribution_plots(Z, "Outputs/Distributions", low_cut=self._cfg.low_percentile_cutoff, high_cut=self._cfg.high_percentile_cutoff,
-                                                      sensitivity=self._cfg.sensitivity1, prefix="Z_distribution")
+        DepthForceProvider._save_distribution_plots(Z, "Outputs/Distributions", low_cut=self._cfg.low_percentile_cutoff, high_cut=self._cfg.high_percentile_cutoff,
+                                                    sensitivity=self._cfg.sensitivity1, prefix="Z_distribution")
 
         low, high = np.percentile(Z[Z > 0], [self._cfg.low_percentile_cutoff, self._cfg.high_percentile_cutoff])
         Z_norm = np.clip((Z - low) / (high - low), 0, 1)
         Z_norm = Z_norm ** (1 / self._cfg.sensitivity1)
 
-        # Apply vesselness filter (Sato) to enhance linear structures
-        Z_vessel = sato(Z_norm, sigmas=self._cfg.sato_sigmas, black_ridges=False)
-        Z_vessel /= Z_vessel.max()
-
-        Z_smooth = gaussian_filter(Z_vessel, sigma=self._cfg.gaussian_sigma)
+        Z_smooth = gaussian_filter(Z_norm, sigma=self._cfg.gaussian_sigma)
         Z_smooth /= Z_smooth.max()
         Z_smooth = Z_smooth ** (1 / self._cfg.sensitivity2)
 
@@ -121,7 +103,7 @@ class TrafficForceProvider(IForceProvider):
 
     @staticmethod
     def _get_tilemap_file_name(cfg: Config):
-        return (f"{cfg.output_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.sample_rate=}-{cfg.base_tile_size_m=}.pkl")
+        return (f"{cfg.output_dir}/{cfg.area}.pkl")
 
     def get_force(self, p: Params) -> Vec2:
         x, y = self._vector_map[0].tile_from_espg4326(p.lon, p.lat)

@@ -5,7 +5,7 @@ import datetime
 from Types.area import Area
 
 AisMessageTuple = namedtuple('AisMessageTuple', ['timestamp', 'lon', 'lat', 'sog', 'cog', 'vessel_type'])
-DepthTuple = namedtuple('DepthTuple', ['lon', 'lat', 'depth'])
+DepthTuple = namedtuple('DepthTuple', ['E', 'N', 'depth'])
 
 
 class IDataAccessHandler(ABC):

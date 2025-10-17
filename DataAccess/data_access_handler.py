@@ -3,9 +3,10 @@ from DataAccess.i_data_connection import IDataConnection
 from DataAccess.i_data_access_handler import IDataAccessHandler, AisMessageTuple, DepthTuple
 import datetime
 from Types.area import Area
+from Types.espg3034_coord import Espg3034Coord
 from Utils.geo_converter import GeoConverter as gc
 
-dk_wgs84_bound_top_left = (3.541543017598474, 58.087114961437905)
+dk_espg3032_bound_top_left = Espg3034Coord(3592900.0, 3475350.0)
 
 
 class DataAccessHandler(IDataAccessHandler):
@@ -97,11 +98,8 @@ class DataAccessHandler(IDataAccessHandler):
         SELECT x, y, depth
         FROM dim.gst_depth_grid_dim
         WHERE st_contains(
-            st_transform(
-                st_geomfromtext(
-                    'POLYGON((%s, %s, %s, %s, %s))',
-                    4326
-                ),
+            st_geomfromtext(
+                %s,
                 3034
             ),
             geom
@@ -109,28 +107,34 @@ class DataAccessHandler(IDataAccessHandler):
 
         """
 
+        polygon_wkt = \
+            f"POLYGON(({area.bottom_left.E} {area.bottom_left.N}, " + \
+            f"{area.bottom_left.E} {area.top_right.N}, " + \
+            f"{area.top_right.E} {area.top_right.N}, " + \
+            f"{area.top_right.E} {area.bottom_left.N}, " + \
+            f"{area.bottom_left.E} {area.bottom_left.N}))"
+
         params = (
-            f"{area.bot_left.lon} {area.bot_left.lat}"
-            f"{area.bot_left.lon} {area.top_right.lat}",
-            f"{area.top_right.lon} {area.top_right.lat}",
-            f"{area.bot_left.lat} {area.top_right.lon}",
-            f"{area.bot_left.lon} {area.bot_left.lat}"
+            polygon_wkt,
         )
+
+        print(f"Fetching depth data...")
 
         results = self.db_connection.execute_query(query, params)
 
+        print(f"Fetched {len(results)} depth records.")
+
         processed_results = []
 
-        dk_top_left_x, dk_top_left_y = gc.epsg3034_to_cell(*gc.espg4326_to_epsg3034(*dk_wgs84_bound_top_left), 0, 0)
+        dk_top_left_x, dk_top_left_y = gc.epsg3034_to_cell(
+            dk_espg3032_bound_top_left.E, dk_espg3032_bound_top_left.N, 25, 25)
 
-        for row in results:
-            x_small, y_small, depth = row
-
+        for (x_small, y_small, depth) in tqdm(results, desc="Processing depth records"):
             x_big = x_small + dk_top_left_x
             y_big = dk_top_left_y - y_small
 
-            lon, lat = gc.cell_to_epsg3034(x_big, y_big, 0, 0)
+            E, N = gc.cell_to_epsg3034(x_big, y_big, 25, 25)
 
-            processed_results.append(DepthTuple(lon, lat, depth))
+            processed_results.append(DepthTuple(E, N, depth))
 
-        return processed_results
+        return 50, processed_results

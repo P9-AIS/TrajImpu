@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from typing import Generic, TypeVar, Tuple
+from typing import Generic, TypeVar, Tuple, Callable
 import math
 from Types.area import Area
 from Types.espg3034_coord import Espg3034Coord
@@ -56,19 +56,35 @@ class Tilemap(Generic[T]):
             x, y = Tilemap._key_to_tile(key)
             yield (x, y), val
 
-    def increment(self, x, y, n=1):
+    def update_tile(self, x, y, func: Callable[[T], T]):
         key = Tilemap._tile_to_key(x, y)
-        self._tilemap[key] = self._tilemap.get(key, 0) + n
+        self._tilemap[key] = func(self._tilemap.get(key, 0))
+
+    def set_tile_from_espg3034(self, E, N, value: T):
+        x, y = self.tile_from_espg3034(E, N)
+        self[x, y] = value
+
+    def set_tile_from_espg4326(self, lon, lat, value: T):
+        x, y = self.tile_from_espg4326(lon, lat)
+        self[x, y] = value
+
+    def tile_from_espg3034(self, E, N) -> Tuple[int, int]:
+        x, y = gc.epsg3034_to_cell(E, N, self._E0, self._N0, self._tile_size)
+        return x, y
 
     def tile_from_espg4326(self, lon, lat) -> Tuple[int, int]:
         x, y = gc.epsg3034_to_cell(*gc.espg4326_to_epsg3034(lon, lat), self._E0, self._N0, self._tile_size)
         return x, y
 
-    def increment_espg4326(self, lon, lat, n=1):
+    def update_tile_espg4326(self, lon, lat, func: Callable[[T], T]):
         x, y = self.tile_from_espg4326(lon, lat)
-        self.increment(x, y, n)
+        self.update_tile(x, y, func)
 
-    def downscale_tile_map(self, factor: int) -> "Tilemap[T]":
+    def update_tile_espg3034(self, E, N, func: Callable[[T], T]):
+        x, y = self.tile_from_espg3034(E, N)
+        self.update_tile(x, y, func)
+
+    def downscale_tile_map(self, factor: int, aggregation_func: Callable[[T, T], T]) -> "Tilemap[T]":
         if factor < 1:
             raise ValueError(f"Downscale factor must be >= 1, got {factor}")
 
@@ -102,7 +118,7 @@ class Tilemap(Generic[T]):
             if new_x >= new_dim_x or new_y >= new_dim_y:
                 continue
 
-            new_tilemap[new_x, new_y] += val
+            new_tilemap.update_tile(new_x, new_y, lambda old_val: aggregation_func(old_val, val))
 
         return new_tilemap
 
