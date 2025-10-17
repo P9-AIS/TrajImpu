@@ -43,7 +43,7 @@ class GeoConverter:
         return E, N
 
     @staticmethod
-    def epsg3034_to_cell(E, N, E0, N0, cell_size=50.0, origin_is_cell_center=True):
+    def epsg3034_to_cell(E, N, E0, N0, cell_size=50.0, origin_is_cell_center=False):
         """
         Convert EPSG:3034 coordinates (E, N) to DDM 50x50m grid cell indices (x, y).
 
@@ -78,7 +78,7 @@ class GeoConverter:
         return x, y
 
     @staticmethod
-    def cell_to_epsg3034(x, y, E0, N0, cell_size=50.0, origin_is_cell_center=True):
+    def cell_to_epsg3034(x, y, E0, N0, cell_size=50.0, origin_is_cell_center=False):
         """
         Convert DDM 50x50m grid indices (x, y) to EPSG:3034 coordinates (E, N).
 
@@ -97,7 +97,7 @@ class GeoConverter:
         return E, N
 
     @staticmethod
-    def cell_corners(x, y, E0, N0, cell_size=50.0, origin_is_cell_center=True):
+    def cell_corners(x, y, E0, N0, cell_size=50.0, origin_is_cell_center=False):
         """
         Get the four corners of a grid cell (x, y) in EPSG:3034 coordinates (E, N).
 

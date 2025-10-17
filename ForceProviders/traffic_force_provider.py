@@ -115,8 +115,8 @@ class TrafficForceProvider(IForceProvider):
         vy = -dz_dy / grad_mag * Z_smooth
 
         return (
-            Tilemap.from_2d(vx, tile_map.get_tile_size(), self._cfg.area),
-            Tilemap.from_2d(vy, tile_map.get_tile_size(), self._cfg.area)
+            Tilemap.from_2d(vx, tile_map.get_tile_size(), tile_map.get_espg3034_bounds()),
+            Tilemap.from_2d(vy, tile_map.get_tile_size(), tile_map.get_espg3034_bounds())
         )
 
     @staticmethod

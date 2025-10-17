@@ -3,6 +3,7 @@ from collections import defaultdict
 from typing import Generic, TypeVar, Tuple
 import math
 from Types.area import Area
+from Types.espg3034_coord import Espg3034Coord
 from Utils.geo_converter import GeoConverter as gc
 
 
@@ -25,8 +26,8 @@ class Tilemap(Generic[T]):
         self._espg3034_bounds = espg3034_bounds
 
         offset_x, offset_y = gc.epsg3034_to_cell(espg3034_bounds.bottom_left.E,
-                                                 espg3034_bounds.bottom_left.N, 0, 0, tile_size)
-        self._E0, self._N0 = gc.cell_to_epsg3034(offset_x + 1, offset_y + 1, 0, 0, tile_size)
+                                                 espg3034_bounds.bottom_left.N, 25, 25, tile_size)
+        self._E0, self._N0 = gc.cell_to_epsg3034(offset_x, offset_y, 25, 25, tile_size)
 
         max_x, max_y = gc.epsg3034_to_cell(espg3034_bounds.top_right.E,
                                            espg3034_bounds.top_right.N, self._E0, self._N0, tile_size)
@@ -46,6 +47,9 @@ class Tilemap(Generic[T]):
 
     def get_dimensions(self) -> Tuple[int, int]:
         return self._dim_x, self._dim_y
+
+    def get_espg3034_bounds(self) -> Area:
+        return self._espg3034_bounds
 
     def items(self):
         for key, val in self._tilemap.items():
@@ -76,13 +80,19 @@ class Tilemap(Generic[T]):
 
         tile_scale_factor = int(math.sqrt(factor))
 
+        new_tile_size = self._tile_size * tile_scale_factor
+        new_dim_x = self._dim_x // tile_scale_factor
+        new_dim_y = self._dim_y // tile_scale_factor
+
         if self._dim_x % tile_scale_factor != 0 or self._dim_y % tile_scale_factor != 0:
             print(
                 f"Warning: Tilemap dimensions ({self._dim_x}, {self._dim_y}) are not divisible by factor {tile_scale_factor}")
-            print(f"Resulting tilemap will be cropped to ({self._dim_x // tile_scale_factor}, "
-                  f"{self._dim_y // tile_scale_factor})")
+            print(f"Resulting tilemap will be cropped to ({new_dim_x}, {new_dim_y})")
 
-        new_tilemap = Tilemap(tile_size=self._tile_size * tile_scale_factor, espg3034_bounds=self._espg3034_bounds)
+        new_E, new_N = gc.cell_to_epsg3034(new_dim_x - 1, new_dim_y - 1, self._E0, self._N0, new_tile_size)
+        new_espg3034_bounds = Area(self._espg3034_bounds.bottom_left, Espg3034Coord(new_E, new_N))
+
+        new_tilemap = Tilemap(new_tile_size, new_espg3034_bounds)
         new_dim_x, new_dim_y = new_tilemap.get_dimensions()
 
         for (x, y), val in self.items():
