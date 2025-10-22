@@ -25,7 +25,7 @@ class Config:
 
 
 class DepthForceProvider(IForceProvider):
-    _vectormap: tuple[Tilemap[float], Tilemap[float]]
+    _vectormap: tuple[np.ndarray, np.ndarray]
     _cfg: Config
     _data_handler: DataAccessHandler
 
@@ -100,10 +100,7 @@ class DepthForceProvider(IForceProvider):
         vx = -dz_dx / grad_mag * (1-Z_transformed)
         vy = -dz_dy / grad_mag * (1-Z_transformed)
 
-        return (
-            Tilemap.from_2d(vx, tile_map.get_tile_size(), tile_map.get_espg3034_bounds()),
-            Tilemap.from_2d(vy, tile_map.get_tile_size(), tile_map.get_espg3034_bounds())
-        )
+        return vx, vy
 
     @staticmethod
     def _get_tilemap_file_name(tile_map_dir: str, cfg: Config):

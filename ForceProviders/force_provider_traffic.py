@@ -33,7 +33,7 @@ class Config:
 
 
 class TrafficForceProvider(IForceProvider):
-    _vectormap: tuple[Tilemap[float], Tilemap[float]]
+    _vectormap: tuple[np.ndarray, np.ndarray]
     _cfg: Config
     _data_handler: DataAccessHandler
 
@@ -97,6 +97,10 @@ class TrafficForceProvider(IForceProvider):
         for (x, y), count in tqdm(tile_map.items(), total=len(tile_map), desc="Building vector field"):
             Z[y, x] = count
 
+        scale = math.sqrt(self._cfg.down_scale_factor)
+        scaled_sato_sigmas = [s / scale for s in self._cfg.sato_sigmas]
+        scaled_gaussian_sigma = self._cfg.gaussian_sigma / scale
+
         Z_transformed = (
             MTB(output_dir=f"{self._cfg.output_dir}/Distributions")
             .percentile_threshold(self._cfg.low_percentile_cutoff, self._cfg.high_percentile_cutoff)
@@ -104,9 +108,9 @@ class TrafficForceProvider(IForceProvider):
             .power_transform(1 / self._cfg.sensitivity1)
             .capture_distribution("after_power1")
             .add_noise(1e-8)
-            .sato_filter(self._cfg.sato_sigmas)
+            .sato_filter(scaled_sato_sigmas)
             .normalize()
-            .gaussian_blur(self._cfg.gaussian_sigma)
+            .gaussian_blur(scaled_gaussian_sigma)
             .normalize()
             .power_transform(1 / self._cfg.sensitivity2)
             .build()
@@ -117,10 +121,7 @@ class TrafficForceProvider(IForceProvider):
         vx = -dz_dx / grad_mag * (1 - Z_transformed)
         vy = -dz_dy / grad_mag * (1 - Z_transformed)
 
-        return (
-            Tilemap.from_2d(vx, tile_map.get_tile_size(), tile_map.get_espg3034_bounds()),
-            Tilemap.from_2d(vy, tile_map.get_tile_size(), tile_map.get_espg3034_bounds())
-        )
+        return vx, vy
 
     @staticmethod
     def _get_tilemap_file_name(tile_map_dir: str, cfg: Config):

@@ -17,29 +17,23 @@ class Config:
     color_map: str = 'jet'
 
 
-def generate_heatmap_image(vectormap: tuple[Tilemap[float], Tilemap[float]], cfg):
+def generate_heatmap_image(vectormap: tuple[np.ndarray, np.ndarray], cfg):
     print("Generating heatmap image...")
 
     os.makedirs(cfg.output_dir, exist_ok=True)
 
-    num_x_tiles, num_y_tiles = vectormap[0].get_dimensions()
-
-    force_magnitudes = np.zeros((num_y_tiles, num_x_tiles), dtype=np.float32)
-
-    for (x, y), u in vectormap[0].items():
-        v = vectormap[1][x, y]
-        magnitude = np.sqrt(u**2 + v**2)
-        force_magnitudes[num_y_tiles - y - 1, x] = magnitude
-
+    vx, vy = vectormap
+    force_magnitudes = np.sqrt(vx**2 + vy**2)
+    force_magnitudes = np.flipud(force_magnitudes)
     force_magnitudes /= force_magnitudes.max()
 
     cmap = plt.get_cmap(cfg.color_map)
     colored = cmap(force_magnitudes)
     colored[..., 3] = (force_magnitudes > 0).astype(float)
 
-    # img = Image.fromarray((colored * 255).astype(np.uint8), mode='RGBA')
     img = Image.fromarray((colored[:, :, :3] * 255).astype(np.uint8), mode='RGB')
 
+    num_y_tiles, num_x_tiles = vx.shape
     tile_size = max(cfg.target_pixel_size // max(num_x_tiles, num_y_tiles), 1)
     if tile_size > 1:
         img = img.resize(
