@@ -1,5 +1,4 @@
 import math
-import matplotlib.pyplot as plt
 from Types.area import Area
 from ForceProviders.i_force_provider import IForceProvider
 from Types.tilemap import Tilemap
@@ -13,8 +12,7 @@ import os
 import numpy as np
 from DataAccess.data_access_handler import DataAccessHandler
 from tqdm import tqdm
-from skimage.filters import sato
-from scipy.ndimage import gaussian_filter
+from Utils.map_transformer import MapTransformerBuilder as MTB
 
 
 @dataclass
@@ -26,7 +24,7 @@ class Config:
     vessel_types: list[VesselType]
     base_tile_size_m: int = 50
     down_scale_factor: int = 1
-    output_dir: str = "Outputs/Tilemaps"
+    output_dir: str = "Outputs/Traffic"
     sato_sigmas: list[int] = field(default_factory=lambda: [1, 2, 4, 8])
     gaussian_sigma: float = 16.0
     low_percentile_cutoff: float = 35.0
@@ -43,8 +41,9 @@ class TrafficForceProvider(IForceProvider):
     def __init__(self, data_handler: DataAccessHandler, cfg: Config):
         self._cfg = cfg
         self._data_handler = data_handler
-        file_name = self._get_tilemap_file_name(cfg)
-        os.makedirs(cfg.output_dir, exist_ok=True)
+        tile_map_dir = f"{cfg.output_dir}/Tilemaps"
+        file_name = self._get_tilemap_file_name(tile_map_dir, cfg)
+        os.makedirs(tile_map_dir, exist_ok=True)
 
         if os.path.exists(file_name):
             print(f"Loading tile map from '{file_name}'")
@@ -94,25 +93,25 @@ class TrafficForceProvider(IForceProvider):
         for (x, y), count in tqdm(tile_map.items(), total=len(tile_map), desc="Building vector field"):
             Z[y, x] = count
 
-        TrafficForceProvider._save_distribution_plots(Z, "Outputs/Distributions", low_cut=self._cfg.low_percentile_cutoff, high_cut=self._cfg.high_percentile_cutoff,
-                                                      sensitivity=self._cfg.sensitivity1, prefix="Z_distribution")
+        Z_transformed = (
+            MTB(output_dir=f"{self._cfg.output_dir}/Distributions")
+            .percentile_threshold(self._cfg.low_percentile_cutoff, self._cfg.high_percentile_cutoff)
+            .normalize()
+            .power_transform(1 / self._cfg.sensitivity1)
+            .capture_distribution("after_power1")
+            .add_noise(0.01)
+            .sato_filter(self._cfg.sato_sigmas)
+            .normalize()
+            .gaussian_blur(self._cfg.gaussian_sigma)
+            .normalize()
+            .power_transform(1 / self._cfg.sensitivity2)
+            .build()
+        )(Z)
 
-        low, high = np.percentile(Z[Z > 0], [self._cfg.low_percentile_cutoff, self._cfg.high_percentile_cutoff])
-        Z_norm = np.clip((Z - low) / (high - low), 0, 1)
-        Z_norm = Z_norm ** (1 / self._cfg.sensitivity1)
-
-        # Apply vesselness filter (Sato) to enhance linear structures
-        Z_vessel = sato(Z_norm, sigmas=self._cfg.sato_sigmas, black_ridges=False)
-        Z_vessel /= Z_vessel.max()
-
-        Z_smooth = gaussian_filter(Z_vessel, sigma=self._cfg.gaussian_sigma)
-        Z_smooth /= Z_smooth.max()
-        Z_smooth = Z_smooth ** (1 / self._cfg.sensitivity2)
-
-        dz_dy, dz_dx = np.gradient(Z_smooth)
+        dz_dy, dz_dx = np.gradient(Z_transformed)
         grad_mag = np.sqrt(dz_dx**2 + dz_dy**2) + 1e-8
-        vx = -dz_dx / grad_mag * Z_smooth
-        vy = -dz_dy / grad_mag * Z_smooth
+        vx = -dz_dx / grad_mag * (1 - Z_transformed)
+        vy = -dz_dy / grad_mag * (1 - Z_transformed)
 
         return (
             Tilemap.from_2d(vx, tile_map.get_tile_size(), tile_map.get_espg3034_bounds()),
@@ -120,8 +119,8 @@ class TrafficForceProvider(IForceProvider):
         )
 
     @staticmethod
-    def _get_tilemap_file_name(cfg: Config):
-        return (f"{cfg.output_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.sample_rate=}-{cfg.base_tile_size_m=}.pkl")
+    def _get_tilemap_file_name(tile_map_dir: str, cfg: Config):
+        return (f"{tile_map_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.sample_rate=}-{cfg.base_tile_size_m=}.pkl")
 
     def get_force(self, p: Params) -> Vec2:
         x, y = self._vector_map[0].tile_from_espg4326(p.lon, p.lat)
@@ -130,51 +129,3 @@ class TrafficForceProvider(IForceProvider):
         y_force = self._vector_map[1][x, y]
 
         return Vec2(x_force, y_force)
-
-    @staticmethod
-    def _save_distribution_plots(Z, output_dir, low_cut=2, high_cut=99.9, sensitivity=3, prefix="Z_distribution"):
-        os.makedirs(output_dir, exist_ok=True)
-
-        values = Z[Z > 0].flatten()
-        low, high = np.percentile(values, [low_cut, high_cut])
-        Z_norm = np.clip((Z - low) / (high - low), 0, 1)
-        Z_norm = Z_norm ** (1 / sensitivity)
-
-        fig, axs = plt.subplots(1, 3, figsize=(18, 5))
-
-        # 1️⃣ Histogram (log freq)
-        axs[0].hist(values, bins=300, log=True, color='steelblue', alpha=0.8)
-        axs[0].axvline(low, color='orange', linestyle='--', label=f"low {low_cut}%")
-        axs[0].axvline(high, color='red', linestyle='--', label=f"high {high_cut}%")
-        axs[0].set_title("Original value distribution (log freq)")
-        axs[0].set_xlabel("Tile value")
-        axs[0].set_ylabel("Frequency (log)")
-        axs[0].legend()
-        axs[0].grid(alpha=0.3)
-
-        # 2️⃣ CDF (Cumulative Distribution)
-        sorted_vals = np.sort(values)
-        cdf = np.linspace(0, 100, len(sorted_vals))
-        axs[1].plot(sorted_vals, cdf, color='steelblue')
-        axs[1].axvline(low, color='orange', linestyle='--', label=f"low {low_cut}%")
-        axs[1].axvline(high, color='red', linestyle='--', label=f"high {high_cut}%")
-        axs[1].set_title("Cumulative Distribution (CDF)")
-        axs[1].set_xlabel("Tile value")
-        axs[1].set_ylabel("Percentile")
-        axs[1].legend()
-        axs[1].grid(alpha=0.3)
-
-        # 3️⃣ Histogram after normalization
-        axs[2].hist(Z_norm[Z_norm > 0].flatten(), bins=300, color='green', alpha=0.8)
-        axs[2].set_title(f"After normalization (sensitivity={sensitivity})")
-        axs[2].set_xlabel("Normalized value (0–1)")
-        axs[2].set_ylabel("Frequency")
-        axs[2].grid(alpha=0.3)
-
-        plt.tight_layout()
-
-        # 4️⃣ Save
-        out_path = os.path.join(output_dir, f"{dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-{prefix}.png")
-        plt.savefig(out_path, dpi=200)
-        plt.close(fig)
-        print(f"📊 Distribution plot saved to: {out_path}")

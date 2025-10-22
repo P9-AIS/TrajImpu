@@ -18,6 +18,8 @@ class Config:
 
 
 def generate_heatmap_image(vectormap: tuple[Tilemap[float], Tilemap[float]], cfg):
+    print("Generating heatmap image...")
+
     os.makedirs(cfg.output_dir, exist_ok=True)
 
     num_x_tiles, num_y_tiles = vectormap[0].get_dimensions()

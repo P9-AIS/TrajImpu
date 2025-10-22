@@ -9,12 +9,12 @@ from DataAccess.postgres_connection import PostgresConnection
 def main():
     cfg = parse_config("config.yaml")
 
-    # prov_traffic = TrafficForceProvider(DataAccessHandler(
-    #     PostgresConnection(cfg.postgresCfg)), cfg.trafficForceProviderCfg)
-    prov_depth = DepthForceProvider(DataAccessHandler(PostgresConnection(cfg.postgresCfg)), cfg.depthForceProviderCfg)
+    prov_traffic = TrafficForceProvider(DataAccessHandler(
+        PostgresConnection(cfg.postgresCfg)), cfg.trafficForceProviderCfg)
+    generate_heatmap_image(prov_traffic._vectormap, cfg.heatmapGeneratorCfg)
 
-    # generate_heatmap_image(prov._vectormap, cfg.heatmapGeneratorCfg)
-    generate_heatmap_image(prov_depth._vectormap, cfg.heatmapGeneratorCfg)
+    # prov_depth = DepthForceProvider(DataAccessHandler(PostgresConnection(cfg.postgresCfg)), cfg.depthForceProviderCfg)
+    # generate_heatmap_image(prov_depth._vectormap, cfg.heatmapGeneratorCfg)
 
 
 if __name__ == "__main__":

@@ -2,3 +2,4 @@ __pycache__
 Outputs
 Data
 config.yaml
+*.pkl
