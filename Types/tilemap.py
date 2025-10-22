@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+import pickle
 from typing import Generic, TypeVar, Tuple, Callable
 import math
 from Types.area import Area
@@ -141,3 +142,18 @@ class Tilemap(Generic[T]):
         x = (key >> 32) & 0xFFFFFFFF
         y = key & 0xFFFFFFFF
         return x, y
+
+    @staticmethod
+    def load(path: str) -> 'Tilemap':
+        print(f"Loading tile map from '{path}'")
+        with open(path, 'rb') as f:
+            tilemap = pickle.load(f)
+        print(f"Loaded {len(tilemap)} tiles\n")
+        return tilemap
+
+    @staticmethod
+    def save(path: str, tilemap: 'Tilemap'):
+        print(f"Saving tile map to '{path}'")
+        with open(path, 'wb') as f:
+            pickle.dump(tilemap, f)
+        print(f"Saved {len(tilemap)} tiles\n")

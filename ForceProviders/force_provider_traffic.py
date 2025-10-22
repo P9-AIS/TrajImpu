@@ -4,10 +4,9 @@ from ForceProviders.i_force_provider import IForceProvider
 from Types.tilemap import Tilemap
 from params import Params
 from Types.vec2 import Vec2
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from vessel_types import VesselType
 import datetime as dt
-import pickle
 import os
 import numpy as np
 from DataAccess.data_access_handler import DataAccessHandler
@@ -41,29 +40,34 @@ class TrafficForceProvider(IForceProvider):
     def __init__(self, data_handler: DataAccessHandler, cfg: Config):
         self._cfg = cfg
         self._data_handler = data_handler
-        tile_map_dir = f"{cfg.output_dir}/Tilemaps"
-        file_name = self._get_tilemap_file_name(tile_map_dir, cfg)
+
+        tile_map = self._handle_get_tile_map()
+        self._vectormap = self._get_vector_map(tile_map)
+
+    def _handle_get_tile_map(self):
+        tile_map_dir = f"{self._cfg.output_dir}/Tilemaps"
         os.makedirs(tile_map_dir, exist_ok=True)
 
-        if os.path.exists(file_name):
-            print(f"Loading tile map from '{file_name}'")
-            with open(file_name, 'rb') as f:
-                tile_map: Tilemap = pickle.load(f)
-            print(f"Loaded {len(tile_map)} tiles from '{file_name}'\n")
+        down_scaled_file_name = self._get_tilemap_file_name(tile_map_dir, self._cfg)
+        original_file_name = self._get_tilemap_file_name(tile_map_dir, replace(self._cfg, down_scale_factor=1))
+
+        if os.path.exists(down_scaled_file_name):
+            return Tilemap.load(down_scaled_file_name)
+
+        if os.path.exists(original_file_name):
+            high_res_tilemap = Tilemap.load(original_file_name)
         else:
-            high_res_tiles = self._get_tile_map()
-            print(f"Saving tile map to '{file_name}'")
-            with open(file_name, 'wb') as f:
-                pickle.dump(high_res_tiles, f)
-            print(f"Saved {len(high_res_tiles)} tiles to '{file_name}'\n")
-            tile_map: Tilemap = high_res_tiles
+            high_res_tilemap = self._get_tile_map()
+            Tilemap.save(original_file_name, high_res_tilemap)
 
-        tile_map = tile_map.downscale_tile_map(self._cfg.down_scale_factor, lambda a, b: a + b)
+        if self._cfg.down_scale_factor == 1:
+            return high_res_tilemap
 
-        print(
-            f"Downsampled tile map to {self._cfg.base_tile_size_m * math.sqrt(self._cfg.down_scale_factor)}m, now contains {len(tile_map)} tiles")
-
-        self._vectormap = self._get_vector_map(tile_map)
+        low_res_tilemap = high_res_tilemap.downscale_tile_map(self._cfg.down_scale_factor, lambda a, b: a + b)
+        new_cell_size = self._cfg.base_tile_size_m * math.sqrt(self._cfg.down_scale_factor)
+        print(f"Downsampled to {new_cell_size}m, {len(low_res_tilemap)} unique tiles total")
+        Tilemap.save(down_scaled_file_name, low_res_tilemap)
+        return low_res_tilemap
 
     def _get_tile_map(self):
         days: list[dt.date] = []
@@ -99,7 +103,7 @@ class TrafficForceProvider(IForceProvider):
             .normalize()
             .power_transform(1 / self._cfg.sensitivity1)
             .capture_distribution("after_power1")
-            .add_noise(0.01)
+            .add_noise(1e-8)
             .sato_filter(self._cfg.sato_sigmas)
             .normalize()
             .gaussian_blur(self._cfg.gaussian_sigma)
@@ -120,7 +124,7 @@ class TrafficForceProvider(IForceProvider):
 
     @staticmethod
     def _get_tilemap_file_name(tile_map_dir: str, cfg: Config):
-        return (f"{tile_map_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.sample_rate=}-{cfg.base_tile_size_m=}.pkl")
+        return (f"{tile_map_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.sample_rate=}-{cfg.base_tile_size_m=}-{cfg.down_scale_factor=}.pkl")
 
     def get_force(self, p: Params) -> Vec2:
         x, y = self._vector_map[0].tile_from_espg4326(p.lon, p.lat)
