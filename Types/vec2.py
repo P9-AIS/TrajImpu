@@ -4,32 +4,28 @@ import numpy as np
 
 
 @dataclass
-class Vec2:
+class Vec3:
     x: float
     y: float
+    z: float
 
-    def __add__(self, other: "Vec2") -> "Vec2":
-        return Vec2(self.x + other.x, self.y + other.y)
+    def __add__(self, other: "Vec3") -> "Vec3":
+        return Vec3(self.x + other.x, self.y + other.y, self.z + other.z)
 
-    def __sub__(self, other: "Vec2") -> "Vec2":
-        return Vec2(self.x - other.x, self.y - other.y)
+    def __sub__(self, other: "Vec3") -> "Vec3":
+        return Vec3(self.x - other.x, self.y - other.y, self.z - other.z)
+
+    def __mul__(self, other: float) -> "Vec3":
+        return Vec3(self.x * other, self.y * other, self.z * other)
+
+    def __truediv__(self, other: float) -> "Vec3":
+        return Vec3(self.x / other, self.y / other, self.z / other)
 
     def magnitude(self) -> float:
-        return math.hypot(self.x, self.y)
+        return math.hypot(self.x, self.y, self.z)
 
-
-def create_vec2_array(vx: np.ndarray, vy: np.ndarray) -> list[list[Vec2]]:
-    if vx.shape != vy.shape:
-        raise ValueError("Input arrays must have the same shape.")
-
-    rows, cols = vx.shape
-    vec2_array = []
-
-    for r in range(rows):
-        row_list = []
-        for c in range(cols):
-            vec = Vec2(x=vx[r, c], y=vy[r, c])
-            row_list.append(vec)
-        vec2_array.append(row_list)
-
-    return vec2_array
+    def normalize(self) -> "Vec3":
+        mag = self.magnitude()
+        if mag == 0:
+            return Vec3(0.0, 0.0, 0.0)
+        return Vec3(self.x / mag, self.y / mag, self.z / mag)

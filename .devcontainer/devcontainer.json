@@ -15,7 +15,7 @@
   // "forwardPorts": [],
 
   // Use 'postCreateCommand' to run commands after the container is created.
-"postCreateCommand": "sudo apt-get update && sudo apt-get install -y libgl1 && pip3 install --user --upgrade opencv-python-headless && pip3 install --user -r requirements.txt",
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y cmake build-essential && pip3 install --user -r requirements.txt",
 
   // Configure tool-specific properties.
   "customizations": {
@@ -26,7 +26,7 @@
     }
   },
 
-  "runArgs": ["--shm-size=12g"]
+  "runArgs": ["--shm-size=96g"]
 	// "mounts": [
 	// 	"type=bind,source=/mnt/dataimputationgroup/Data/RawData,target=${containerWorkspaceFolder}/Data"
 	// ]

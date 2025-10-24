@@ -4,12 +4,13 @@ from ForceProviders.i_force_provider import IForceProvider
 from Types.tilemap import Tilemap
 from Utils.map_transformer import MapTransformerBuilder as MTB
 from params import Params
-from Types.vec2 import Vec2
+from Types.vec2 import Vec3
 from dataclasses import dataclass, replace
 import os
 import numpy as np
 from DataAccess.data_access_handler import DataAccessHandler
 from tqdm import tqdm
+from Utils.geo_converter import GeoConverter as gc
 
 
 @dataclass
@@ -106,10 +107,9 @@ class DepthForceProvider(IForceProvider):
     def _get_tilemap_file_name(tile_map_dir: str, cfg: Config):
         return (f"{tile_map_dir}/{cfg.area=}-{cfg.down_scale_factor=}.pkl")
 
-    def get_force(self, p: Params) -> Vec2:
-        x, y = self._vector_map[0].tile_from_espg4326(p.lon, p.lat)
+    def get_force(self, p: Params) -> Vec3:
+        x, y = self._tile_map.tile_from_espg3034(*gc.espg4326_to_epsg3034(p.lon, p.lat))
+        x_force = self._vectormap[0][y, x]
+        y_force = self._vectormap[1][y, x]
 
-        x_force = self._vector_map[0][x, y]
-        y_force = self._vector_map[1][x, y]
-
-        return Vec2(x_force, y_force)
+        return Vec3(x_force, y_force)

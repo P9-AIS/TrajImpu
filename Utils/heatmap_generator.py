@@ -1,12 +1,12 @@
 from Types.tilemap import Tilemap
-from Types.vec2 import Vec2
+from Types.vec2 import Vec3
 import os
-from Types.vec2 import Vec2
+from Types.vec2 import Vec3
 import datetime
 from dataclasses import dataclass
 import numpy as np
 import matplotlib.pyplot as plt
-from Types.vec2 import Vec2
+from Types.vec2 import Vec3
 from PIL import Image
 
 
@@ -48,7 +48,7 @@ def generate_heatmap_image(vectormap: tuple[np.ndarray, np.ndarray], cfg):
     print(f"✅ Heatmap saved to {output_path}")
 
 
-def generate_vectormap(ff: list[list[Vec2]], tile_size: int = 25, output_dir: str = "Outputs/Vectormaps"):
+def generate_vectormap(ff: list[list[Vec3]], tile_size: int = 25, output_dir: str = "Outputs/Vectormaps"):
     if not ff or not ff[0]:
         print("Input force field is empty.")
         return

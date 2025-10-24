@@ -1,5 +1,9 @@
-from pyproj import Transformer
+from datetime import date
+from pyproj import Transformer, Geod
 import math
+import wmm2020
+
+from Types.vec2 import Vec3
 
 
 class GeoConverter:
@@ -139,3 +143,42 @@ class GeoConverter:
         N4 = N3
 
         return [(E1, N1), (E2, N2), (E3, N3), (E4, N4)]
+
+    @staticmethod
+    def normalize_angle(angle_deg):
+        """Normalize to [0, 360)."""
+        return (angle_deg % 360.0 + 360.0) % 360.0
+
+    @staticmethod
+    def move_along_mag_heading(heading_mag_deg, distance_m, lon, lat, dt):
+        """
+        Move from a starting position (lat, lon) using a magnetic heading.
+        Accounts for magnetic declination (WMM2020) and Earth's shape.
+        Returns new (lat2, lon2).
+        """
+        # --- magnetic → true ---
+        year_decimal = dt.year + (dt.timetuple().tm_yday / 365.25)
+        result = wmm2020.wmm(lat, lon, 0, year_decimal)
+
+        decl = float(result["decl"].values.item())
+        heading_true = heading_mag_deg + decl
+
+        # --- move along true heading ---
+        geod = Geod(ellps="WGS84")
+        lon2, lat2, _ = geod.fwd(lon, lat, heading_true, distance_m)
+        return lon2, lat2, heading_true, decl
+
+    @staticmethod
+    def espg4326_heading_to_espg3034_heading(heading_deg, lon, lat, dt):
+        """
+        Convert a heading in EPSG:4326 (degrees clockwise from true north)
+        to a heading in EPSG:3034 (degrees clockwise from grid north).
+        """
+        espg4326_p1 = (lon, lat)
+        espg4326_p2 = GeoConverter.move_along_mag_heading(heading_deg, 10, lon, lat, dt)[:2]
+
+        espg3034_p1 = GeoConverter.espg4326_to_epsg3034(*espg4326_p1)
+        espg3034_p2 = GeoConverter.espg4326_to_epsg3034(*espg4326_p2)
+
+        heading_vec = Vec3(espg3034_p2[0] - espg3034_p1[0], espg3034_p2[1] - espg3034_p1[1])
+        return heading_vec.normalize()
