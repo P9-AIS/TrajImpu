@@ -82,7 +82,7 @@ class TrafficForceProvider(IForceProvider):
 
         print(f"Creating {self._cfg.base_tile_size_m}m tile map from {len(ais_messages)} AIS messages")
 
-        tilemap = Tilemap(self._cfg.base_tile_size_m, self._cfg.area)
+        tilemap = Tilemap(self._cfg.base_tile_size_m, self._cfg.area, dtype=np.int32)
 
         for (lon, lat) in tqdm(ais_messages, desc="Aggregating tiles"):
             tilemap.update_tile_espg4326(lon, lat, lambda old_val: old_val + 1)
@@ -101,13 +101,13 @@ class TrafficForceProvider(IForceProvider):
             .percentile_threshold(self._cfg.low_percentile_cutoff, self._cfg.high_percentile_cutoff)
             .normalize()
             .power_transform(1 / self._cfg.sensitivity1)
-            .capture_distribution("after_power1")
-            .add_noise(1e-8)
+            # .add_noise(0.01)
+            # .capture_distribution("after_power1")
             .sato_filter(scaled_sato_sigmas)
             .normalize()
             .gaussian_blur(scaled_gaussian_sigma)
             .normalize()
-            .power_transform(1 / self._cfg.sensitivity2)
+            # .power_transform(1 / self._cfg.sensitivity2)
             .build()
         )(tilemap.get_array())
 

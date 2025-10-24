@@ -7,7 +7,7 @@ postgresCfg:
 
 trafficForceProviderCfg:
   start_date: 2024-01-01
-  end_date: 2024-01-02
+  end_date: 2024-01-07
   sample_rate: 1
   base_tile_size_m: 50
   down_scale_factor: 16
@@ -19,13 +19,30 @@ trafficForceProviderCfg:
       E: 4399500.0
       N: 3475350.0
   vessel_types: ['cargo', 'tanker']
-  output_dir: "Outputs/Tilemaps"
-  sato_sigmas: [1, 2, 4,8]
-  gaussian_sigma: 16.0
+  output_dir: "Outputs/Traffic"
+  sato_sigmas: [4, 8, 16, 32]
+  gaussian_sigma: 32
   low_percentile_cutoff: 1.0
-  high_percentile_cutoff: 99.0
-  sensitivity1: 3
+  high_percentile_cutoff: 99
+  sensitivity1: 0.5
+  sensitivity2: 1
+
+depthForceProviderCfg:
+  down_scale_factor: 16
+  area:
+    bottom_left:
+      E: 3592900.0
+      N: 3055500.0
+    top_right:
+      E: 4399500.0
+      N: 3475350.0
+  output_dir: "Outputs/Depth"
+  gaussian_sigma: 4
+  low_percentile_cutoff: 0
+  high_percentile_cutoff: 50
+  sensitivity1: 2
   sensitivity2: 2
+
 
 heatmapGeneratorCfg:
   output_dir: "Outputs/Heatmaps"
