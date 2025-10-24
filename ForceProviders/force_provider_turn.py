@@ -1,5 +1,5 @@
 from ForceProviders.i_force_provider import IForceProvider
-from params import Params
+from Types.params import Params
 from Types.vec2 import Vec3
 
 

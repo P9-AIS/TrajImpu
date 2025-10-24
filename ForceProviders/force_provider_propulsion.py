@@ -1,12 +1,12 @@
 from ForceProviders.i_force_provider import IForceProvider
-from params import Params
+from Types.params import Params
 from Types.vec2 import Vec3
 import datetime as dt
 from Utils.geo_converter import GeoConverter as gc
 
 
 class PropulsionForceProvider(IForceProvider):
-    _prev_vel: Vec3 = Vec3(0.0, 0.0)
+    _prev_vel: Vec3 = Vec3(0.0, 0.0, 0.0)
     _prev_time: int = 0
 
     def get_force(self, p: Params) -> Vec3:

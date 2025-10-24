@@ -180,5 +180,5 @@ class GeoConverter:
         espg3034_p1 = GeoConverter.espg4326_to_epsg3034(*espg4326_p1)
         espg3034_p2 = GeoConverter.espg4326_to_epsg3034(*espg4326_p2)
 
-        heading_vec = Vec3(espg3034_p2[0] - espg3034_p1[0], espg3034_p2[1] - espg3034_p1[1])
+        heading_vec = Vec3(espg3034_p2[0] - espg3034_p1[0], espg3034_p2[1] - espg3034_p1[1], 0.0)
         return heading_vec.normalize()

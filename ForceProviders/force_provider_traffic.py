@@ -2,10 +2,10 @@ import math
 from Types.area import Area
 from ForceProviders.i_force_provider import IForceProvider
 from Types.tilemap import Tilemap
-from params import Params
+from Types.params import Params
 from Types.vec2 import Vec3
 from dataclasses import dataclass, field, replace
-from vessel_types import VesselType
+from Types.vessel_types import VesselType
 import datetime as dt
 import os
 import numpy as np
@@ -129,9 +129,12 @@ class TrafficForceProvider(IForceProvider):
     def _get_tilemap_file_name(tile_map_dir: str, cfg: Config):
         return (f"{tile_map_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.sample_rate=}-{cfg.base_tile_size_m=}-{cfg.down_scale_factor=}.pkl")
 
+    def get_vector_map(self) -> tuple[np.ndarray, np.ndarray]:
+        return self._vectormap
+
     def get_force(self, p: Params) -> Vec3:
         x, y = self._tile_map.tile_from_espg3034(*gc.espg4326_to_epsg3034(p.lon, p.lat))
         x_force = self._vectormap[0][y, x]
         y_force = self._vectormap[1][y, x]
 
-        return Vec3(x_force, y_force)
+        return Vec3(x_force, y_force, 0.0)

@@ -98,7 +98,7 @@ class MapTransformer:
     def save_distribution_plots(output_dir, prefix="Z_distribution"):
         def plotter(input_map: Map) -> Map:
             os.makedirs(output_dir, exist_ok=True)
-            fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+            fig, axs = plt.subplots(1, 2, figsize=(12, 5))
 
             # 1️⃣ Histogram (log freq)
             values = input_map[input_map > 0].flatten()

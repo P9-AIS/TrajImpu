@@ -3,7 +3,7 @@ from Types.area import Area
 from ForceProviders.i_force_provider import IForceProvider
 from Types.tilemap import Tilemap
 from Utils.map_transformer import MapTransformerBuilder as MTB
-from params import Params
+from Types.params import Params
 from Types.vec2 import Vec3
 from dataclasses import dataclass, replace
 import os
@@ -112,4 +112,4 @@ class DepthForceProvider(IForceProvider):
         x_force = self._vectormap[0][y, x]
         y_force = self._vectormap[1][y, x]
 
-        return Vec3(x_force, y_force)
+        return Vec3(x_force, y_force, 0.0)
