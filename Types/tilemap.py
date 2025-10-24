@@ -90,8 +90,6 @@ class Tilemap(Generic[T]):
         new_dim_x = self._tilemap.shape[1] // scale * scale
         arr_cropped = self._tilemap[:new_dim_y, :new_dim_x]
 
-        print(f"Downscaled tilemap to {new_dim_x // scale}x{new_dim_y // scale} using factor {factor}")
-
         reshaped = arr_cropped.reshape(new_dim_y // scale, scale, new_dim_x // scale, scale)
         downscaled = aggregation_func(reshaped, axis=(1, 3))
 
