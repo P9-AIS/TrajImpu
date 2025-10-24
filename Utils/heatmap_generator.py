@@ -1,12 +1,12 @@
 from Types.tilemap import Tilemap
-from Types.vec2 import Vec3
+from Types.vec3 import Vec3
 import os
-from Types.vec2 import Vec3
+from Types.vec3 import Vec3
 import datetime
 from dataclasses import dataclass
 import numpy as np
 import matplotlib.pyplot as plt
-from Types.vec2 import Vec3
+from Types.vec3 import Vec3
 from PIL import Image
 
 

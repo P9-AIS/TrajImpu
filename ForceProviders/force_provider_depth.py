@@ -4,7 +4,7 @@ from ForceProviders.i_force_provider import IForceProvider
 from Types.tilemap import Tilemap
 from Utils.map_transformer import MapTransformerBuilder as MTB
 from Types.params import Params
-from Types.vec2 import Vec3
+from Types.vec3 import Vec3
 from dataclasses import dataclass, replace
 import os
 import numpy as np
@@ -57,7 +57,7 @@ class DepthForceProvider(IForceProvider):
         if self._cfg.down_scale_factor == 1:
             return tilemap
 
-        tilemap.downscale(self._cfg.down_scale_factor, np.min)
+        tilemap.downscale(self._cfg.down_scale_factor, np.average)
         print(f"Downsampled to {tilemap.get_tile_size()}m, {tilemap.get_dimensions()}")
         tilemap.save(down_scaled_file_name)
         return tilemap
@@ -67,7 +67,7 @@ class DepthForceProvider(IForceProvider):
 
         print(f"Creating {tile_size}m tile map from {len(depth_messages)} depth messages")
 
-        tilemap = Tilemap(tile_size, self._cfg.area)
+        tilemap = Tilemap(tile_size, self._cfg.area, dtype=np.float32)
 
         for (E, N, depth) in tqdm(depth_messages, desc="Aggregating tiles"):
             tilemap.update_tile_espg3034(E, N, lambda old_val: depth if old_val == 0 else min(old_val, depth))
@@ -82,14 +82,15 @@ class DepthForceProvider(IForceProvider):
 
         Z_transformed = (
             MTB(output_dir=f"{self._cfg.output_dir}/Distributions")
-            .percentile_threshold(self._cfg.low_percentile_cutoff, self._cfg.high_percentile_cutoff)
+            .add_noise(0.01)
+            .threshold(0.0, 30)
+            # .percentile_threshold(self._cfg.low_percentile_cutoff, self._cfg.high_percentile_cutoff)
             .normalize()
             .power_transform(1 / self._cfg.sensitivity1)
             .capture_distribution("after_power1")
-            .add_noise(0.01)
             .gaussian_blur(scaled_gaussian_sigma)
-            .normalize()
-            .power_transform(1 / self._cfg.sensitivity2)
+            # .normalize()
+            # .power_transform(1 / self._cfg.sensitivity2)
             .build()
         )(tilemap.get_array())
 

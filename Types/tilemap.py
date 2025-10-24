@@ -1,5 +1,5 @@
 import pickle
-from typing import Generic, TypeVar, Tuple, Callable
+from typing import Tuple, Callable, Union
 import math
 
 import numpy as np
@@ -7,19 +7,17 @@ from Types.area import Area
 from Utils.geo_converter import GeoConverter as gc
 
 
-T = TypeVar("Numeric", int, float)
+Numeric = Union[int, float, np.number]
 
 
-class Tilemap(Generic[T]):
+class Tilemap:
     _tilemap: np.ndarray
     _tile_size: int
     _espg3034_bounds: Area
-    _dim_x: int
-    _dim_y: int
     _E0: float
     _N0: float
 
-    def __init__(self, tile_size: int, espg3034_bounds: Area):
+    def __init__(self, tile_size: int, espg3034_bounds: Area, dtype: type):
         self._tile_size = tile_size
         self._espg3034_bounds = espg3034_bounds
 
@@ -29,20 +27,20 @@ class Tilemap(Generic[T]):
 
         max_x, max_y = gc.epsg3034_to_cell(espg3034_bounds.top_right.E,
                                            espg3034_bounds.top_right.N, self._E0, self._N0, tile_size)
-        self._dim_x, self._dim_y = max_x + 1, max_y + 1
-        self._tilemap = np.zeros((self._dim_y, self._dim_x), dtype=np.int32)
 
-    def __getitem__(self, key: tuple[int, int]) -> T:
+        self._tilemap = np.zeros((max_y + 1, max_x + 1), dtype=dtype)
+
+    def __getitem__(self, key: tuple[int, int]) -> Numeric:
         return self._tilemap[*key]
 
-    def __setitem__(self, key: tuple[int, int], value: T):
+    def __setitem__(self, key: tuple[int, int], value: Numeric):
         self._tilemap[*key] = value
 
     def get_tile_size(self) -> int:
         return self._tile_size
 
     def get_dimensions(self) -> Tuple[int, int]:
-        return self._dim_x, self._dim_y
+        return self._tilemap.shape[1], self._tilemap.shape[0]
 
     def get_espg3034_bounds(self) -> Area:
         return self._espg3034_bounds
@@ -50,14 +48,14 @@ class Tilemap(Generic[T]):
     def get_array(self) -> np.ndarray:
         return self._tilemap
 
-    def update_tile(self, x, y, func: Callable[[T], T]):
+    def update_tile(self, x, y, func: Callable[[Numeric], Numeric]):
         self._tilemap[y, x] = func(self._tilemap[y, x])
 
-    def set_tile_from_espg3034(self, E, N, value: T):
+    def set_tile_from_espg3034(self, E, N, value: Numeric):
         x, y = self.tile_from_espg3034(E, N)
         self[y, x] = value
 
-    def set_tile_from_espg4326(self, lon, lat, value: T):
+    def set_tile_from_espg4326(self, lon, lat, value: Numeric):
         x, y = self.tile_from_espg4326(lon, lat)
         self[y, x] = value
 
@@ -69,11 +67,11 @@ class Tilemap(Generic[T]):
         x, y = gc.epsg3034_to_cell(*gc.espg4326_to_epsg3034(lon, lat), self._E0, self._N0, self._tile_size)
         return x, y
 
-    def update_tile_espg4326(self, lon, lat, func: Callable[[T], T]):
+    def update_tile_espg4326(self, lon, lat, func: Callable[[Numeric], Numeric]):
         x, y = self.tile_from_espg4326(lon, lat)
         self.update_tile(x, y, func)
 
-    def update_tile_espg3034(self, E, N, func: Callable[[T], T]):
+    def update_tile_espg3034(self, E, N, func: Callable[[Numeric], Numeric]):
         x, y = self.tile_from_espg3034(E, N)
         self.update_tile(x, y, func)
 
@@ -94,7 +92,6 @@ class Tilemap(Generic[T]):
         downscaled = aggregation_func(reshaped, axis=(1, 3))
 
         self._tilemap = downscaled
-        self._dim_y, self._dim_x = downscaled.shape
         self._tile_size *= scale
 
     def save(self, path: str):

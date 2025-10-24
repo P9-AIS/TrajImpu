@@ -1,6 +1,6 @@
 import numpy as np
 from Types.params import Params
-from Types.vec2 import Vec3
+from Types.vec3 import Vec3
 from abc import ABC, abstractmethod
 
 
