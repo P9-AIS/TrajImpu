@@ -27,6 +27,7 @@ class Config:
 
 class DepthForceProvider(IForceProvider):
     _vectormap: tuple[np.ndarray, np.ndarray]
+    _tilemap: Tilemap
     _cfg: Config
     _data_handler: DataAccessHandler
 
@@ -34,54 +35,50 @@ class DepthForceProvider(IForceProvider):
         self._cfg = cfg
         self._data_handler = data_handler
 
-        tile_map = self._handle_get_tile_map()
-        self._vectormap = self._get_vector_map(tile_map)
+        self._tilemap = self._handle_get_tilemap()
+        self._vectormap = self._get_vectormap(self._tilemap)
 
-    def _handle_get_tile_map(self):
-        tile_map_dir = f"{self._cfg.output_dir}/Tilemaps"
-        os.makedirs(tile_map_dir, exist_ok=True)
+    def _handle_get_tilemap(self):
+        tilemap_dir = f"{self._cfg.output_dir}/Tilemaps"
+        os.makedirs(tilemap_dir, exist_ok=True)
 
-        down_scaled_file_name = self._get_tilemap_file_name(tile_map_dir, self._cfg)
-        original_file_name = self._get_tilemap_file_name(tile_map_dir, replace(self._cfg, down_scale_factor=1))
+        down_scaled_file_name = self._get_tilemap_file_name(tilemap_dir, self._cfg)
+        original_file_name = self._get_tilemap_file_name(tilemap_dir, replace(self._cfg, down_scale_factor=1))
 
         if os.path.exists(down_scaled_file_name):
             return Tilemap.load(down_scaled_file_name)
 
         if os.path.exists(original_file_name):
-            high_res_tilemap = Tilemap.load(original_file_name)
+            tilemap = Tilemap.load(original_file_name)
         else:
-            high_res_tilemap = self._get_tile_map()
-            Tilemap.save(original_file_name, high_res_tilemap)
+            tilemap = self._get_tilemap()
+            tilemap.save(original_file_name)
 
         if self._cfg.down_scale_factor == 1:
-            return high_res_tilemap
+            return tilemap
 
-        low_res_tilemap = high_res_tilemap.downscale_tile_map(self._cfg.down_scale_factor, lambda a, b: a + b)
-        new_cell_size = 50 * math.sqrt(self._cfg.down_scale_factor)
-        print(f"Downsampled to {new_cell_size}m, {len(low_res_tilemap)} unique tiles total")
-        Tilemap.save(down_scaled_file_name, low_res_tilemap)
-        return low_res_tilemap
+        tilemap.downscale(self._cfg.down_scale_factor, np.min)
+        print(f"Downsampled to {tilemap.get_tile_size()}m, {tilemap.get_dimensions()}")
+        tilemap.save(down_scaled_file_name)
+        return tilemap
 
-    def _get_tile_map(self):
+    def _get_tilemap(self):
         tile_size, depth_messages = self._data_handler.get_depths(self._cfg.area)
 
         print(f"Creating {tile_size}m tile map from {len(depth_messages)} depth messages")
 
-        tile_map = Tilemap(tile_size, self._cfg.area)
+        tilemap = Tilemap(tile_size, self._cfg.area)
 
         for (E, N, depth) in tqdm(depth_messages, desc="Aggregating tiles"):
-            tile_map.update_tile_espg3034(E, N, lambda old_val: depth if old_val == 0 else min(old_val, depth))
+            tilemap.update_tile_espg3034(E, N, lambda old_val: depth if old_val == 0 else min(old_val, depth))
 
-        return tile_map
+        return tilemap
 
-    def _get_vector_map(self, tile_map):
+    def _get_vectormap(self, tilemap):
         print(f"Creating vector field from tile map")
 
-        dim_x, dim_y = tile_map.get_dimensions()
-        Z = np.zeros((dim_y, dim_x), dtype=np.float32)
-
-        for (x, y), count in tqdm(tile_map.items(), total=len(tile_map), desc="Building vector field"):
-            Z[y, x] = count
+        scale = math.sqrt(self._cfg.down_scale_factor)
+        scaled_gaussian_sigma = self._cfg.gaussian_sigma / scale
 
         Z_transformed = (
             MTB(output_dir=f"{self._cfg.output_dir}/Distributions")
@@ -90,11 +87,11 @@ class DepthForceProvider(IForceProvider):
             .power_transform(1 / self._cfg.sensitivity1)
             .capture_distribution("after_power1")
             .add_noise(0.01)
-            # .gaussian_blur(self._cfg.gaussian_sigma)
-            # .normalize()
-            # .power_transform(1 / self._cfg.sensitivity2)
+            .gaussian_blur(scaled_gaussian_sigma)
+            .normalize()
+            .power_transform(1 / self._cfg.sensitivity2)
             .build()
-        )(Z)
+        )(tilemap.get_array())
 
         dz_dy, dz_dx = np.gradient(Z_transformed)
         grad_mag = np.sqrt(dz_dx**2 + dz_dy**2) + 1e-8
@@ -104,11 +101,14 @@ class DepthForceProvider(IForceProvider):
         return vx, vy
 
     @staticmethod
-    def _get_tilemap_file_name(tile_map_dir: str, cfg: Config):
-        return (f"{tile_map_dir}/{cfg.area=}-{cfg.down_scale_factor=}.pkl")
+    def _get_tilemap_file_name(tilemap_dir: str, cfg: Config):
+        return (f"{tilemap_dir}/{cfg.area=}-{cfg.down_scale_factor=}.npz")
+
+    def get_vectormap(self) -> tuple[np.ndarray, np.ndarray]:
+        return self._vectormap
 
     def get_force(self, p: Params) -> Vec3:
-        x, y = self._tile_map.tile_from_espg3034(*gc.espg4326_to_epsg3034(p.lon, p.lat))
+        x, y = self._tilemap.tile_from_espg3034(*gc.espg4326_to_epsg3034(p.lon, p.lat))
         x_force = self._vectormap[0][y, x]
         y_force = self._vectormap[1][y, x]
 

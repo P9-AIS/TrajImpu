@@ -94,33 +94,38 @@ class DataAccessHandler(IDataAccessHandler):
         return all_results
 
     def get_depths(self, area: Area) -> tuple[int, list[DepthTuple]]:
-        query = """
-        SELECT x, y, depth
-        FROM dim.gst_depth_grid_dim
-        WHERE st_contains(
-            st_geomfromtext(
-                %s,
-                3034
-            ),
-            geom
-        );
+        # query = """
+        # SELECT x, y, depth
+        # FROM dim.gst_depth_grid_dim
+        # WHERE st_contains(
+        #     st_geomfromtext(
+        #         %s,
+        #         3034
+        #     ),
+        #     geom
+        # );
 
-        """
+        # """
 
-        polygon_wkt = \
-            f"POLYGON(({area.bottom_left.E} {area.bottom_left.N}, " + \
-            f"{area.bottom_left.E} {area.top_right.N}, " + \
-            f"{area.top_right.E} {area.top_right.N}, " + \
-            f"{area.top_right.E} {area.bottom_left.N}, " + \
-            f"{area.bottom_left.E} {area.bottom_left.N}))"
+        # polygon_wkt = \
+        #     f"POLYGON(({area.bottom_left.E} {area.bottom_left.N}, " + \
+        #     f"{area.bottom_left.E} {area.top_right.N}, " + \
+        #     f"{area.top_right.E} {area.top_right.N}, " + \
+        #     f"{area.top_right.E} {area.bottom_left.N}, " + \
+        #     f"{area.bottom_left.E} {area.bottom_left.N}))"
 
-        params = (
-            polygon_wkt,
-        )
+        # params = (
+        #     polygon_wkt,
+        # )
 
-        print(f"Fetching depth data...")
+        # print(f"Fetching depth data...")
 
-        results = self.db_connection.execute_query(query, params)
+        # results = self.db_connection.execute_query(query, params)
+
+        # load form pickle
+        import pickle
+        with open('depth_data.pkl', 'rb') as f:
+            results = pickle.load(f)
 
         print(f"Fetched {len(results)} depth records.")
 

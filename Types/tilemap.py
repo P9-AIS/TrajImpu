@@ -1,10 +1,9 @@
-from collections import defaultdict
-
 import pickle
 from typing import Generic, TypeVar, Tuple, Callable
 import math
+
+import numpy as np
 from Types.area import Area
-from Types.espg3034_coord import Espg3034Coord
 from Utils.geo_converter import GeoConverter as gc
 
 
@@ -12,7 +11,7 @@ T = TypeVar("Numeric", int, float)
 
 
 class Tilemap(Generic[T]):
-    _tilemap: dict[int, T]
+    _tilemap: np.ndarray
     _tile_size: int
     _espg3034_bounds: Area
     _dim_x: int
@@ -22,8 +21,6 @@ class Tilemap(Generic[T]):
 
     def __init__(self, tile_size: int, espg3034_bounds: Area):
         self._tile_size = tile_size
-        self._tilemap = defaultdict(int)
-
         self._espg3034_bounds = espg3034_bounds
 
         offset_x, offset_y = gc.epsg3034_to_cell(espg3034_bounds.bottom_left.E,
@@ -33,15 +30,13 @@ class Tilemap(Generic[T]):
         max_x, max_y = gc.epsg3034_to_cell(espg3034_bounds.top_right.E,
                                            espg3034_bounds.top_right.N, self._E0, self._N0, tile_size)
         self._dim_x, self._dim_y = max_x + 1, max_y + 1
+        self._tilemap = np.zeros((self._dim_y, self._dim_x), dtype=np.int32)
 
     def __getitem__(self, key: tuple[int, int]) -> T:
-        return self._tilemap[Tilemap._tile_to_key(*key)]
+        return self._tilemap[*key]
 
     def __setitem__(self, key: tuple[int, int], value: T):
-        self._tilemap[Tilemap._tile_to_key(*key)] = value
-
-    def __len__(self) -> int:
-        return len(self._tilemap)
+        self._tilemap[*key] = value
 
     def get_tile_size(self) -> int:
         return self._tile_size
@@ -52,22 +47,19 @@ class Tilemap(Generic[T]):
     def get_espg3034_bounds(self) -> Area:
         return self._espg3034_bounds
 
-    def items(self):
-        for key, val in self._tilemap.items():
-            x, y = Tilemap._key_to_tile(key)
-            yield (x, y), val
+    def get_array(self) -> np.ndarray:
+        return self._tilemap
 
     def update_tile(self, x, y, func: Callable[[T], T]):
-        key = Tilemap._tile_to_key(x, y)
-        self._tilemap[key] = func(self._tilemap.get(key, 0))
+        self._tilemap[y, x] = func(self._tilemap[y, x])
 
     def set_tile_from_espg3034(self, E, N, value: T):
         x, y = self.tile_from_espg3034(E, N)
-        self[x, y] = value
+        self[y, x] = value
 
     def set_tile_from_espg4326(self, lon, lat, value: T):
         x, y = self.tile_from_espg4326(lon, lat)
-        self[x, y] = value
+        self[y, x] = value
 
     def tile_from_espg3034(self, E, N) -> Tuple[int, int]:
         x, y = gc.epsg3034_to_cell(E, N, self._E0, self._N0, self._tile_size)
@@ -85,75 +77,42 @@ class Tilemap(Generic[T]):
         x, y = self.tile_from_espg3034(E, N)
         self.update_tile(x, y, func)
 
-    def downscale_tile_map(self, factor: int, aggregation_func: Callable[[T, T], T]) -> "Tilemap[T]":
+    def downscale(self, factor: int, aggregation_func: Callable[[np.ndarray], np.ndarray] = np.sum):
         if factor < 1:
-            raise ValueError(f"Downscale factor must be >= 1, got {factor}")
+            raise ValueError("Factor must be >= 1")
 
-        if factor == 1:
-            return self
+        scale = int(math.sqrt(factor))
 
-        if math.sqrt(factor) % 1 != 0:
-            raise ValueError(f"Downscale factor must be a perfect square, got {factor}")
+        if scale * scale != factor:
+            raise ValueError("Factor must be a perfect square")
 
-        tile_scale_factor = int(math.sqrt(factor))
+        new_dim_y = self._tilemap.shape[0] // scale * scale
+        new_dim_x = self._tilemap.shape[1] // scale * scale
+        arr_cropped = self._tilemap[:new_dim_y, :new_dim_x]
 
-        new_tile_size = self._tile_size * tile_scale_factor
-        new_dim_x = self._dim_x // tile_scale_factor
-        new_dim_y = self._dim_y // tile_scale_factor
+        print(f"Downscaled tilemap to {new_dim_x // scale}x{new_dim_y // scale} using factor {factor}")
 
-        if self._dim_x % tile_scale_factor != 0 or self._dim_y % tile_scale_factor != 0:
-            print(
-                f"Warning: Tilemap dimensions ({self._dim_x}, {self._dim_y}) are not divisible by factor {tile_scale_factor}")
-            print(f"Resulting tilemap will be cropped to ({new_dim_x}, {new_dim_y})")
+        reshaped = arr_cropped.reshape(new_dim_y // scale, scale, new_dim_x // scale, scale)
+        downscaled = aggregation_func(reshaped, axis=(1, 3))
 
-        new_E, new_N = gc.cell_to_epsg3034(new_dim_x - 1, new_dim_y - 1, self._E0, self._N0, new_tile_size)
-        new_espg3034_bounds = Area(self._espg3034_bounds.bottom_left, Espg3034Coord(new_E, new_N))
+        self._tilemap = downscaled
+        self._dim_y, self._dim_x = downscaled.shape
+        self._tile_size *= scale
 
-        new_tilemap = Tilemap(new_tile_size, new_espg3034_bounds)
-        new_dim_x, new_dim_y = new_tilemap.get_dimensions()
-
-        for (x, y), val in self.items():
-            new_x = x // tile_scale_factor
-            new_y = y // tile_scale_factor
-
-            if new_x >= new_dim_x or new_y >= new_dim_y:
-                continue
-
-            new_tilemap.update_tile(new_x, new_y, lambda old_val: aggregation_func(old_val, val))
-
-        return new_tilemap
-
-    @staticmethod
-    def from_2d(tile_array: list[list[T]], tile_size: int, espg3034_bounds: Area) -> "Tilemap[T]":
-        tilemap = Tilemap(tile_size, espg3034_bounds)
-        for y, row in enumerate(tile_array):
-            for x, val in enumerate(row):
-                if val != 0:
-                    tilemap[x, y] = val
-        return tilemap
-
-    @staticmethod
-    def _tile_to_key(x: int, y: int) -> int:
-        key = (x << 32) | y
-        return key
-
-    @staticmethod
-    def _key_to_tile(key: int) -> Tuple[int, int]:
-        x = (key >> 32) & 0xFFFFFFFF
-        y = key & 0xFFFFFFFF
-        return x, y
-
-    @staticmethod
-    def load(path: str) -> 'Tilemap':
-        print(f"Loading tile map from '{path}'")
-        with open(path, 'rb') as f:
-            tilemap = pickle.load(f)
-        print(f"Loaded {len(tilemap)} tiles\n")
-        return tilemap
-
-    @staticmethod
-    def save(path: str, tilemap: 'Tilemap'):
+    def save(self, path: str):
         print(f"Saving tile map to '{path}'")
-        with open(path, 'wb') as f:
-            pickle.dump(tilemap, f)
-        print(f"Saved {len(tilemap)} tiles\n")
+        np.savez_compressed(
+            path,
+            tilemap_object=pickle.dumps(self, protocol=pickle.HIGHEST_PROTOCOL),
+            tile_array=self._tilemap
+        )
+        print(f"Saved tile map of size {self.get_dimensions()}\n")
+
+    @staticmethod
+    def load(path: str) -> "Tilemap":
+        print(f"Loading tile map from '{path}'")
+        with np.load(path, allow_pickle=True) as data:
+            tilemap: Tilemap = pickle.loads(data['tilemap_object'].item())
+            tilemap._tilemap = data['tile_array']
+        print(f"Loaded tile map of size {tilemap.get_dimensions()}\n")
+        return tilemap

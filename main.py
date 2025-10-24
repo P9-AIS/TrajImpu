@@ -11,13 +11,13 @@ from Types.params import Params
 def main():
     cfg = parse_config("config.yaml")
 
-    prov_traffic = TrafficForceProvider(DataAccessHandler(
-        PostgresConnection(cfg.postgresCfg)), cfg.trafficForceProviderCfg)
+    # prov_traffic = TrafficForceProvider(DataAccessHandler(
+    #     PostgresConnection(cfg.postgresCfg)), cfg.trafficForceProviderCfg)
 
-    generate_heatmap_image(prov_traffic.get_vector_map(), cfg.heatmapGeneratorCfg)
+    # generate_heatmap_image(prov_traffic.get_vector_map(), cfg.heatmapGeneratorCfg)
 
-    # prov_depth = DepthForceProvider(DataAccessHandler(PostgresConnection(cfg.postgresCfg)), cfg.depthForceProviderCfg)
-    # generate_heatmap_image(prov_depth.get_vector_map(), cfg.heatmapGeneratorCfg)
+    prov_depth = DepthForceProvider(DataAccessHandler(PostgresConnection(cfg.postgresCfg)), cfg.depthForceProviderCfg)
+    generate_heatmap_image(prov_depth.get_vectormap(), cfg.heatmapGeneratorCfg)
 
 
 if __name__ == "__main__":

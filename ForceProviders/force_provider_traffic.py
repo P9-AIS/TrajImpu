@@ -37,41 +37,40 @@ class TrafficForceProvider(IForceProvider):
     _vectormap: tuple[np.ndarray, np.ndarray]
     _cfg: Config
     _data_handler: DataAccessHandler
-    _tile_map: Tilemap
+    _tilemap: Tilemap
 
     def __init__(self, data_handler: DataAccessHandler, cfg: Config):
         self._cfg = cfg
         self._data_handler = data_handler
 
-        self._tile_map = self._handle_get_tile_map()
-        self._vectormap = self._get_vector_map(self._tile_map)
+        self._tilemap = self._handle_get_tilemap()
+        self._vectormap = self._get_vectormap(self._tilemap)
 
-    def _handle_get_tile_map(self):
-        tile_map_dir = f"{self._cfg.output_dir}/Tilemaps"
-        os.makedirs(tile_map_dir, exist_ok=True)
+    def _handle_get_tilemap(self):
+        tilemap_dir = f"{self._cfg.output_dir}/Tilemaps"
+        os.makedirs(tilemap_dir, exist_ok=True)
 
-        down_scaled_file_name = self._get_tilemap_file_name(tile_map_dir, self._cfg)
-        original_file_name = self._get_tilemap_file_name(tile_map_dir, replace(self._cfg, down_scale_factor=1))
+        down_scaled_file_name = self._get_tilemap_file_name(tilemap_dir, self._cfg)
+        original_file_name = self._get_tilemap_file_name(tilemap_dir, replace(self._cfg, down_scale_factor=1))
 
         if os.path.exists(down_scaled_file_name):
             return Tilemap.load(down_scaled_file_name)
 
         if os.path.exists(original_file_name):
-            high_res_tilemap = Tilemap.load(original_file_name)
+            tilemap = Tilemap.load(original_file_name)
         else:
-            high_res_tilemap = self._get_tile_map()
-            Tilemap.save(original_file_name, high_res_tilemap)
+            tilemap = self._get_tilemap()
+            tilemap.save(original_file_name)
 
         if self._cfg.down_scale_factor == 1:
-            return high_res_tilemap
+            return tilemap
 
-        low_res_tilemap = high_res_tilemap.downscale_tile_map(self._cfg.down_scale_factor, lambda a, b: a + b)
-        new_cell_size = self._cfg.base_tile_size_m * math.sqrt(self._cfg.down_scale_factor)
-        print(f"Downsampled to {new_cell_size}m, {len(low_res_tilemap)} unique tiles total")
-        Tilemap.save(down_scaled_file_name, low_res_tilemap)
-        return low_res_tilemap
+        tilemap.downscale(self._cfg.down_scale_factor, np.sum)
+        print(f"Downsampled to {tilemap.get_tile_size()}m, {tilemap.get_dimensions()}")
+        tilemap.save(down_scaled_file_name)
+        return tilemap
 
-    def _get_tile_map(self):
+    def _get_tilemap(self):
         days: list[dt.date] = []
 
         cur_date = self._cfg.start_date
@@ -83,21 +82,15 @@ class TrafficForceProvider(IForceProvider):
 
         print(f"Creating {self._cfg.base_tile_size_m}m tile map from {len(ais_messages)} AIS messages")
 
-        tile_map = Tilemap(self._cfg.base_tile_size_m, self._cfg.area)
+        tilemap = Tilemap(self._cfg.base_tile_size_m, self._cfg.area)
 
         for (lon, lat) in tqdm(ais_messages, desc="Aggregating tiles"):
-            tile_map.update_tile_espg4326(lon, lat, lambda old_val: old_val + 1)
+            tilemap.update_tile_espg4326(lon, lat, lambda old_val: old_val + 1)
 
-        return tile_map
+        return tilemap
 
-    def _get_vector_map(self, tile_map):
+    def _get_vectormap(self, tilemap):
         print(f"Creating vector field from tile map")
-
-        dim_x, dim_y = tile_map.get_dimensions()
-        Z = np.zeros((dim_y, dim_x), dtype=np.float32)
-
-        for (x, y), count in tqdm(tile_map.items(), total=len(tile_map), desc="Building vector field"):
-            Z[y, x] = count
 
         scale = math.sqrt(self._cfg.down_scale_factor)
         scaled_sato_sigmas = [s / scale for s in self._cfg.sato_sigmas]
@@ -116,24 +109,24 @@ class TrafficForceProvider(IForceProvider):
             .normalize()
             .power_transform(1 / self._cfg.sensitivity2)
             .build()
-        )(Z)
+        )(tilemap.get_array())
 
-        dz_dy, dz_dx = np.gradient(Z_transformed)
-        grad_mag = np.sqrt(dz_dx**2 + dz_dy**2) + 1e-8
-        vx = -dz_dx / grad_mag * (1 - Z_transformed)
-        vy = -dz_dy / grad_mag * (1 - Z_transformed)
+        dy, dx = np.gradient(Z_transformed)
+        grad_mag = np.sqrt(dx**2 + dy**2) + 1e-8
+        vx = -dx / grad_mag * (1 - Z_transformed)
+        vy = -dy / grad_mag * (1 - Z_transformed)
 
         return vx, vy
 
     @staticmethod
-    def _get_tilemap_file_name(tile_map_dir: str, cfg: Config):
-        return (f"{tile_map_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.sample_rate=}-{cfg.base_tile_size_m=}-{cfg.down_scale_factor=}.pkl")
+    def _get_tilemap_file_name(tilemap_dir: str, cfg: Config):
+        return (f"{tilemap_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.sample_rate=}-{cfg.base_tile_size_m=}-{cfg.down_scale_factor=}.npz")
 
-    def get_vector_map(self) -> tuple[np.ndarray, np.ndarray]:
+    def get_vectormap(self) -> tuple[np.ndarray, np.ndarray]:
         return self._vectormap
 
     def get_force(self, p: Params) -> Vec3:
-        x, y = self._tile_map.tile_from_espg3034(*gc.espg4326_to_epsg3034(p.lon, p.lat))
+        x, y = self._tilemap.tile_from_espg3034(*gc.espg4326_to_epsg3034(p.lon, p.lat))
         x_force = self._vectormap[0][y, x]
         y_force = self._vectormap[1][y, x]
 
