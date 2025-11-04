@@ -1,7 +1,7 @@
 import psycopg2
 from typing import List, Optional
 from dataclasses import dataclass
-from DataAccess.i_data_connection import IDataConnection
+from Connection.i_data_connection import IDataConnection
 
 
 @dataclass

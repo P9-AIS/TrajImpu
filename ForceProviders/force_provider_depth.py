@@ -8,7 +8,7 @@ from Types.vec3 import Vec3
 from dataclasses import dataclass, replace
 import os
 import numpy as np
-from DataAccess.data_access_handler import DataAccessHandler
+from DataAccess.force_data_access_handler import ForceDataAccessHandler
 from tqdm import tqdm
 from Utils.geo_converter import GeoConverter as gc
 
@@ -29,9 +29,9 @@ class DepthForceProvider(IForceProvider):
     _vectormap: tuple[np.ndarray, np.ndarray]
     _tilemap: Tilemap
     _cfg: Config
-    _data_handler: DataAccessHandler
+    _data_handler: ForceDataAccessHandler
 
-    def __init__(self, data_handler: DataAccessHandler, cfg: Config):
+    def __init__(self, data_handler: ForceDataAccessHandler, cfg: Config):
         self._cfg = cfg
         self._data_handler = data_handler
 

@@ -1,11 +1,13 @@
 import yaml
 from Config.visitor import ConfigVisitorRegistry
-from DataAccess.postgres_connection import Config as PostgresConfig
+from Connection.postgres_connection import Config as PostgresConfig
 from ForceProviders.force_provider_traffic import Config as TrafficForceProviderConfig
 from ForceProviders.force_provider_depth import Config as DepthForceProviderConfig
 from Types.espg3034_coord import Espg3034Coord
 from Types.area import Area
-from Utils.heatmap_generator import Config as HeatmapGeneratorConfig
+from ForceUtils.heatmap_generator import Config as HeatmapGeneratorConfig
+from ModelUtils.data_loader import Config as ModelDataLoaderConfig
+from ModelUtils.data_processor import Config as ModelDataProcessorConfig
 from dataclasses import dataclass
 
 
@@ -15,6 +17,8 @@ class Config:
     trafficForceProviderCfg: TrafficForceProviderConfig
     depthForceProviderCfg: DepthForceProviderConfig
     heatmapGeneratorCfg: HeatmapGeneratorConfig
+    modelDataLoaderCfg: ModelDataLoaderConfig
+    modelDataProcessorCfg: ModelDataProcessorConfig
 
 
 def parse_config(path: str) -> Config:
@@ -28,6 +32,8 @@ def parse_config(path: str) -> Config:
         depthForceProviderCfg=ConfigVisitorRegistry.visit(
             DepthForceProviderConfig, cfg_dict["depthForceProviderCfg"]),
         heatmapGeneratorCfg=ConfigVisitorRegistry.visit(HeatmapGeneratorConfig, cfg_dict["heatmapGeneratorCfg"]),
+        modelDataLoaderCfg=ConfigVisitorRegistry.visit(ModelDataLoaderConfig, cfg_dict["modelDataLoaderCfg"]),
+        modelDataProcessorCfg=ConfigVisitorRegistry.visit(ModelDataProcessorConfig, cfg_dict["modelDataProcessorCfg"]),
     )
 
 
@@ -84,4 +90,14 @@ ConfigVisitorRegistry.register(
 ConfigVisitorRegistry.register(
     Espg3034Coord,
     lambda data: Espg3034Coord(**data)
+)
+
+ConfigVisitorRegistry.register(
+    ModelDataLoaderConfig,
+    lambda data: ModelDataLoaderConfig(**data)
+)
+
+ConfigVisitorRegistry.register(
+    ModelDataProcessorConfig,
+    lambda data: ModelDataProcessorConfig(**data)
 )

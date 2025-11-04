@@ -1,6 +1,6 @@
 import csv
-from DataAccess.i_data_access_handler import (
-    IDataAccessHandler,
+from ForceData.i_force_data_access_handler import (
+    IForceDataAccessHandler,
     AisMessageTuple,
 )
 import datetime
@@ -10,7 +10,7 @@ from tqdm import tqdm
 from Types.area import Area
 
 
-class MockDataAccessHandler(IDataAccessHandler):
+class ForceDataAccessHandlerMock(IForceDataAccessHandler):
     def __init__(self, csv_file: str):
         self.csv_file = csv_file
 
