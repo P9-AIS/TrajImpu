@@ -7,5 +7,5 @@ from abc import ABC, abstractmethod
 class IForceProvider(ABC):
 
     @abstractmethod
-    def get_force(p: Params) -> Vec3:
+    def get_force(self, p: Params) -> Vec3:
         pass

@@ -38,7 +38,7 @@ def generate_heatmap_image(vectormap: tuple[np.ndarray, np.ndarray], cfg):
     if tile_size > 1:
         img = img.resize(
             (num_x_tiles * tile_size, num_y_tiles * tile_size),
-            resample=Image.NEAREST
+            resample=Image.Resampling.NEAREST
         )
 
     filename = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-heatmap.png"

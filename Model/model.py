@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from dataclasses import dataclass
+from dataclasses import field, dataclass
 from Model.ais_encoder import HeterogeneousAttributeEncoder
 from Model.afa_module import AFAModule
 from Model.brits import BRITS
@@ -13,12 +13,13 @@ class Config:
 
     # encoder
     dim_ais_attr_encoding: int = 16
+    status: str = "test"
     num_ais_attributes: int = 14
-    num_navi_status_class: int
-    num_destination_class: int
-    num_cargo_type_class: int
-    num_vessel_type_class: int
-    max_delta: float
+    num_navi_status_class: int = 0
+    num_destination_class: int = 0
+    num_cargo_type_class: int = 0
+    num_vessel_type_class: int = 0
+    max_delta: float = 0.0
 
     # afa module
     num_layers: int = 2
@@ -27,7 +28,7 @@ class Config:
     # brits
     seq_len: int = 64
     dim_rnn_hidden: int = 10
-    kwargs: dict
+    kwargs: dict = field(default_factory=lambda: {"MIT": True, "device": "cpu"})
 
     # decoder
     dim_hidden: int = 64
@@ -38,6 +39,7 @@ class Model(nn.Module):
         super().__init__()
         self.ais_encoder = HeterogeneousAttributeEncoder(
             cfg.dim_ais_attr_encoding,
+            cfg.status,
             cfg.num_navi_status_class,
             cfg.num_destination_class,
             cfg.num_cargo_type_class,
@@ -48,8 +50,8 @@ class Model(nn.Module):
         self.ais_encoding_dim = cfg.dim_ais_attr_encoding * cfg.num_ais_attributes
 
         self.afa_module = AFAModule(self.ais_encoding_dim, cfg.num_head, cfg.num_layers)
-        self.impu_module = BRITS(cfg.seq_len, self.ais_encoding_dim + 3, cfg.dim_rnn_hidden, cfg.kwargs)
-        self.ais_decoder = AISDecoder(self.ais_encoding_dim + 3, cfg.dim_hidden, cfg.num_ais_attributes)
+        self.impu_module = BRITS(cfg.seq_len, self.ais_encoding_dim + 3, cfg.dim_rnn_hidden, **cfg.kwargs)
+        self.ais_decoder = AISDecoder(self.ais_encoding_dim + 3, cfg.num_ais_attributes)
 
     def forward(self, ais_data, masks, gap_size):
         encoded = self.ais_encoder(ais_data)

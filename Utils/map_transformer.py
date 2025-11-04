@@ -3,7 +3,7 @@ import datetime as dt
 import numpy as np
 import matplotlib.pyplot as plt
 from numpy import percentile, random
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, cast
 import numpy.typing as npt
 
 
@@ -70,7 +70,7 @@ class MapTransformer:
         from skimage.filters import sato
 
         def sato_transformer(input_map: Map) -> Map:
-            return sato(input_map, sigmas=sigmas, black_ridges=False)
+            return sato(input_map, sigmas=cast(range, sigmas), black_ridges=False)
         return sato_transformer
 
     @staticmethod
@@ -90,7 +90,7 @@ class MapTransformer:
     @staticmethod
     def add_noise(amplitude: float) -> Transformer:
         def noiser(input_map: Map) -> Map:
-            noise = random.uniform(0, amplitude, size=input_map.shape)
+            noise = random.uniform(0, amplitude, size=input_map.shape).astype(np.float32)
             return input_map + noise
         return noiser
 

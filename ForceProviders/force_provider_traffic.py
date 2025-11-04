@@ -84,7 +84,7 @@ class TrafficForceProvider(IForceProvider):
 
         tilemap = Tilemap(self._cfg.base_tile_size_m, self._cfg.area, dtype=np.int32)
 
-        for (lon, lat) in tqdm(ais_messages, desc="Aggregating tiles"):
+        for (_, lon, lat, _, _, _) in tqdm(ais_messages, desc="Aggregating tiles"):
             tilemap.update_tile_espg4326(lon, lat, lambda old_val: old_val + 1)
 
         return tilemap

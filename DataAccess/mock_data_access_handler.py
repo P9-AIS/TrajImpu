@@ -82,17 +82,17 @@ class MockDataAccessHandler(IDataAccessHandler):
                             continue
 
                         # 3. Filtering by Area (Geographical Bounds)
-                        if not (
-                            area.bot_left.lat <= latitude <= area.top_right.lat
-                            and area.bot_left.lon <= longitude <= area.top_right.lon
-                        ):
-                            continue
+                        # if not (
+                        #     area.bot_left.lat <= latitude <= area.top_right.lat
+                        #     and area.bot_left.lon <= longitude <= area.top_right.lon
+                        # ):
+                        #     continue
 
                         # 4. Create and store the AisMessageTuple
                         message = AisMessageTuple(
                             timestamp=timestamp,
-                            latitude=latitude,
-                            longitude=longitude,
+                            lon=longitude,
+                            lat=latitude,
                             sog=sog,
                             cog=cog,
                             vessel_type=vessel_type,

@@ -49,7 +49,7 @@ class Tilemap:
         return self._tilemap
 
     def update_tile(self, x, y, func: Callable[[Numeric], Numeric]):
-        self._tilemap[y, x] = func(self._tilemap[y, x])
+        self._tilemap[y, x] = func(self._tilemap[y, x].item())
 
     def set_tile_from_espg3034(self, E, N, value: Numeric):
         x, y = self.tile_from_espg3034(E, N)
@@ -75,7 +75,7 @@ class Tilemap:
         x, y = self.tile_from_espg3034(E, N)
         self.update_tile(x, y, func)
 
-    def downscale(self, factor: int, aggregation_func: Callable[[np.ndarray], np.ndarray] = np.sum):
+    def downscale(self, factor: int, aggregation_func: Callable[..., np.ndarray] = np.sum):
         if factor < 1:
             raise ValueError("Factor must be >= 1")
 
