@@ -59,8 +59,3 @@ modelDataLoaderCfg:
   shuffle: true
   num_workers: 4
   train_split: 0.8 # Proportion of data used for training
-
-
-modelDataProcessorCfg:
-  param1: 1
-  param2: 2

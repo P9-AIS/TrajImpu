@@ -50,29 +50,16 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
    # Download raw data of AISDK and AISUS
     def download_ais_dataset(self, file_name: str):
         raw_data_path = "ModelData/"
-        csv_file_path_list = []
         # Step 1: Set base information about raw dataset
-        global time_col_name, Lat_col_name, Lon_col_name, time_formulation
-        if "aisdk" in file_name:
-            download_url = "http://aisdata.ais.dk/2024/"
-            csv_file_name = f"{file_name}.csv"
-            if ("2006" in file_name):
-                csv_file_name = file_name[:5] + "_" + file_name[5:].replace("-", "") + ".csv"
-            print(csv_file_name)
-            time_col_name, Lat_col_name, Lon_col_name = "# Timestamp", "Latitude", "Longitude"
-            time_formulation = "%d/%m/%Y %H:%M:%S"
-        else:  # https://coast.noaa.gov/htdata/CMSP/AISDataHandler/2024/index.html
-            download_url = "https://coast.noaa.gov/htdata/CMSP/AISDataHandler/" + file_name[4:8] + "/"
-            csv_file_name = f"{file_name}.csv"
-            time_col_name, Lat_col_name, Lon_col_name = "BaseDateTime", "LAT", "LON"
-            time_formulation = "%Y-%m-%dT%H:%M:%S"
+        download_url = "http://aisdata.ais.dk/2024/"
+        csv_file_name = f"{file_name}.csv"
+        print(csv_file_name)
 
         # Step 2: Check if CSV file already exists
         csv_file_path = os.path.join(raw_data_path, "csv_files", csv_file_name)
 
         if os.path.exists(csv_file_path):
             print(f"CSV file '{csv_file_path}' already exists. No download needed.")
-            csv_file_path_list.append(csv_file_path)
             return csv_file_path
 
         # Step 3: Download and unzip if CSV doesn't exist
@@ -126,7 +113,6 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
             print(f"Error: CSV file '{csv_file_path}' not found after unzipping.")
             return None
 
-        print(csv_file_path)
         return csv_file_path
 
     def download_csv_files(self) -> list[str]:
@@ -134,7 +120,7 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
         csv_file_paths: list[str] = []
         while cur_date <= self.config.date_end:
             file_name: str
-            if cur_date == dt.date(2024, 1, 1) or cur_date == dt.date(2024, 2, 1):
+            if cur_date == dt.date(2024, 1, 1) or cur_date == dt.date(2024, 2, 1):  # One month in each file...
                 file_name: str = f"aisdk-{cur_date.year}-{cur_date.month:02d}"
             elif dt.date(2024, 1, 2) <= cur_date <= dt.date(2024, 1, 31) or dt.date(2024, 2, 2) <= cur_date <= dt.date(2024, 2, 29):
                 continue
@@ -223,7 +209,7 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
                 # parse datetime
                 time_idx = self._col_name_to_index("Timestamp")
                 filtered_data[:, time_idx] = [
-                    dt.datetime.strptime(v, time_formulation).timestamp()
+                    dt.datetime.strptime(v, "%d/%m/%Y %H:%M:%S").timestamp()
                     for v in filtered_data[:, time_idx]
                 ]
 

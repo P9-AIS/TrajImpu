@@ -16,6 +16,8 @@ class Config:
 
 
 class IModelDataAccessHandler(ABC):
+    def __init__(self, config: Config):
+        self.config = config
 
     @abstractmethod
     def get_ais_messages(self) -> list[AisMessageTuple]:
