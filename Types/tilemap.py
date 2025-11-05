@@ -4,7 +4,7 @@ import math
 
 import numpy as np
 from Types.area import Area
-from Utils.geo_converter import GeoConverter as gc
+from ForceUtils.geo_converter import GeoConverter as gc
 
 
 Numeric = Union[int, float, np.number]

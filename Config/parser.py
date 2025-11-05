@@ -7,7 +7,8 @@ from Types.espg3034_coord import Espg3034Coord
 from Types.area import Area
 from ForceUtils.heatmap_generator import Config as HeatmapGeneratorConfig
 from ModelUtils.data_loader import Config as ModelDataLoaderConfig
-from ModelUtils.data_processor import Config as ModelDataProcessorConfig
+# from ModelUtils.data_processor import Config as ModelDataProcessorConfig
+from ModelData.i_model_data_access_handler import Config as ModelDatasetConfig
 from dataclasses import dataclass
 
 
@@ -18,7 +19,8 @@ class Config:
     depthForceProviderCfg: DepthForceProviderConfig
     heatmapGeneratorCfg: HeatmapGeneratorConfig
     modelDataLoaderCfg: ModelDataLoaderConfig
-    modelDataProcessorCfg: ModelDataProcessorConfig
+    # modelDataProcessorCfg: ModelDataProcessorConfig
+    modelDatasetCfg: ModelDatasetConfig
 
 
 def parse_config(path: str) -> Config:
@@ -33,7 +35,8 @@ def parse_config(path: str) -> Config:
             DepthForceProviderConfig, cfg_dict["depthForceProviderCfg"]),
         heatmapGeneratorCfg=ConfigVisitorRegistry.visit(HeatmapGeneratorConfig, cfg_dict["heatmapGeneratorCfg"]),
         modelDataLoaderCfg=ConfigVisitorRegistry.visit(ModelDataLoaderConfig, cfg_dict["modelDataLoaderCfg"]),
-        modelDataProcessorCfg=ConfigVisitorRegistry.visit(ModelDataProcessorConfig, cfg_dict["modelDataProcessorCfg"]),
+        # modelDataProcessorCfg=ConfigVisitorRegistry.visit(ModelDataProcessorConfig, cfg_dict["modelDataProcessorCfg"]),
+        modelDatasetCfg=ConfigVisitorRegistry.visit(ModelDatasetConfig, cfg_dict["modelDatasetCfg"]),
     )
 
 
@@ -97,7 +100,12 @@ ConfigVisitorRegistry.register(
     lambda data: ModelDataLoaderConfig(**data)
 )
 
+# ConfigVisitorRegistry.register(
+#     ModelDataProcessorConfig,
+#     lambda data: ModelDataProcessorConfig(**data)
+# )
+
 ConfigVisitorRegistry.register(
-    ModelDataProcessorConfig,
-    lambda data: ModelDataProcessorConfig(**data)
+    ModelDatasetConfig,
+    lambda data: ModelDatasetConfig(**data)
 )

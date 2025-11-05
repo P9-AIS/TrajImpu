@@ -49,10 +49,17 @@ heatmapGeneratorCfg:
   target_pixel_size: 4000
   color_map: 'jet' # Options: 'plasma', 'viridis', 'inferno', 'jet'
 
+modelDatasetCfg:
+  date_start: 2024-01-01
+  date_end: 2024-12-31
+  area: "string"
+
 modelDataLoaderCfg:
   batch_size: 64
   shuffle: true
   num_workers: 4
+  train_split: 0.8 # Proportion of data used for training
+
 
 modelDataProcessorCfg:
   param1: 1

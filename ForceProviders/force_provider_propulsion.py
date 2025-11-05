@@ -2,7 +2,7 @@ from ForceProviders.i_force_provider import IForceProvider
 from Types.params import Params
 from Types.vec3 import Vec3
 import datetime as dt
-from Utils.geo_converter import GeoConverter as gc
+from ForceUtils.geo_converter import GeoConverter as gc
 
 
 class PropulsionForceProvider(IForceProvider):

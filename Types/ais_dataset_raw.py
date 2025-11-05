@@ -4,5 +4,5 @@ class AISDatasetRaw:
         pass
 
     @staticmethod
-    def load(path: str) -> AISDatasetRaw:
-        pass
+    def load(path: str) -> "AISDatasetRaw":
+        return AISDatasetRaw()

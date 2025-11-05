@@ -7,5 +7,5 @@ class AISDatasetProcessed:
         pass
 
     @staticmethod
-    def load(path: str) -> AISDatasetProcessed:
-        pass
+    def load(path: str) -> "AISDatasetProcessed":
+        return AISDatasetProcessed()

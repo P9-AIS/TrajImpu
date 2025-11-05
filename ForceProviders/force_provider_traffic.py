@@ -9,10 +9,10 @@ from Types.vessel_types import VesselType
 import datetime as dt
 import os
 import numpy as np
-from DataAccess.force_data_access_handler import ForceDataAccessHandler
+from ForceData.force_data_access_handler_db import ForceDataAccessHandlerDb
 from tqdm import tqdm
-from Utils.map_transformer import MapTransformerBuilder as MTB
-from Utils.geo_converter import GeoConverter as gc
+from ForceUtils.map_transformer import MapTransformerBuilder as MTB
+from ForceUtils.geo_converter import GeoConverter as gc
 
 
 @dataclass
@@ -36,10 +36,10 @@ class Config:
 class TrafficForceProvider(IForceProvider):
     _vectormap: tuple[np.ndarray, np.ndarray]
     _cfg: Config
-    _data_handler: ForceDataAccessHandler
+    _data_handler: ForceDataAccessHandlerDb
     _tilemap: Tilemap
 
-    def __init__(self, data_handler: ForceDataAccessHandler, cfg: Config):
+    def __init__(self, data_handler: ForceDataAccessHandlerDb, cfg: Config):
         self._cfg = cfg
         self._data_handler = data_handler
 

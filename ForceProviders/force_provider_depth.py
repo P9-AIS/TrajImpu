@@ -2,15 +2,15 @@ import math
 from Types.area import Area
 from ForceProviders.i_force_provider import IForceProvider
 from Types.tilemap import Tilemap
-from Utils.map_transformer import MapTransformerBuilder as MTB
+from ForceUtils.map_transformer import MapTransformerBuilder as MTB
 from Types.params import Params
 from Types.vec3 import Vec3
 from dataclasses import dataclass, replace
 import os
 import numpy as np
-from DataAccess.force_data_access_handler import ForceDataAccessHandler
+from ForceData.force_data_access_handler_db import ForceDataAccessHandlerDb
 from tqdm import tqdm
-from Utils.geo_converter import GeoConverter as gc
+from ForceUtils.geo_converter import GeoConverter as gc
 
 
 @dataclass
@@ -29,9 +29,9 @@ class DepthForceProvider(IForceProvider):
     _vectormap: tuple[np.ndarray, np.ndarray]
     _tilemap: Tilemap
     _cfg: Config
-    _data_handler: ForceDataAccessHandler
+    _data_handler: ForceDataAccessHandlerDb
 
-    def __init__(self, data_handler: ForceDataAccessHandler, cfg: Config):
+    def __init__(self, data_handler: ForceDataAccessHandlerDb, cfg: Config):
         self._cfg = cfg
         self._data_handler = data_handler
 

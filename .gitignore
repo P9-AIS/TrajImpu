@@ -3,3 +3,6 @@ Outputs
 Data
 config.yaml
 *.pkl
+csv_files
+np_files
+zip_files

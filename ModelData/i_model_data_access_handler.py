@@ -1,14 +1,22 @@
 from collections import namedtuple
 from abc import ABC, abstractmethod
-import datetime
-
+import datetime as dt
+from dataclasses import dataclass
 from Types.area import Area
 
-AisMessageTuple = namedtuple('AisMessageTuple', ['timestamp', 'lon', 'lat', 'sog', 'cog', 'vessel_type'])
+AisMessageTuple = namedtuple('AisMessageTuple', ['timestamp', 'mmsi',
+                             'lat', 'lon', 'rot', 'sog', 'cog', 'heading', 'vessel_type', 'draught'])
+
+
+@dataclass
+class Config:
+    date_start: dt.date
+    date_end: dt.date
+    area: str  # ????????????????? needs to be polygon
 
 
 class IModelDataAccessHandler(ABC):
 
     @abstractmethod
-    def get_ais_messages(self, dates: list[datetime.date], area: Area) -> list[AisMessageTuple]:
+    def get_ais_messages(self) -> list[AisMessageTuple]:
         pass
