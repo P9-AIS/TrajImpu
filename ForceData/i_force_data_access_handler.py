@@ -2,7 +2,7 @@ from collections import namedtuple
 from abc import ABC, abstractmethod
 import datetime
 
-from Types.area import Area
+from ForceTypes.area import Area
 
 AisMessageTuple = namedtuple('AisMessageTuple', ['timestamp', 'lon', 'lat', 'sog', 'cog', 'vessel_type'])
 DepthTuple = namedtuple('DepthTuple', ['E', 'N', 'depth'])

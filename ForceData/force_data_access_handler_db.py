@@ -2,8 +2,8 @@ from tqdm import tqdm
 from Connection.i_data_connection import IDataConnection
 from ForceData.i_force_data_access_handler import IForceDataAccessHandler, AisMessageTuple, DepthTuple
 import datetime
-from Types.area import Area
-from Types.espg3034_coord import Espg3034Coord
+from ForceTypes.area import Area
+from ForceTypes.espg3034_coord import Espg3034Coord
 from ForceUtils.geo_converter import GeoConverter as gc
 
 dk_espg3032_bound_top_left = Espg3034Coord(3592900.0, 3475350.0)

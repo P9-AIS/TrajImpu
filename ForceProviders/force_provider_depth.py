@@ -1,10 +1,10 @@
 import math
-from Types.area import Area
+from ForceTypes.area import Area
 from ForceProviders.i_force_provider import IForceProvider
-from Types.tilemap import Tilemap
+from ForceTypes.tilemap import Tilemap
 from ForceUtils.map_transformer import MapTransformerBuilder as MTB
-from Types.params import Params
-from Types.vec3 import Vec3
+from ForceTypes.params import Params
+from ForceTypes.vec3 import Vec3
 from dataclasses import dataclass, replace
 import os
 import numpy as np
@@ -40,7 +40,6 @@ class DepthForceProvider(IForceProvider):
 
     def _handle_get_tilemap(self):
         tilemap_dir = f"{self._cfg.output_dir}/Tilemaps"
-        os.makedirs(tilemap_dir, exist_ok=True)
 
         down_scaled_file_name = self._get_tilemap_file_name(tilemap_dir, self._cfg)
         original_file_name = self._get_tilemap_file_name(tilemap_dir, replace(self._cfg, down_scale_factor=1))

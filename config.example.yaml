@@ -8,7 +8,7 @@ postgresCfg:
 trafficForceProviderCfg:
   start_date: 2024-01-01
   end_date: 2024-01-07
-  sample_rate: 1
+  date_step: 1
   base_tile_size_m: 50
   down_scale_factor: 16
   area:
@@ -49,13 +49,23 @@ heatmapGeneratorCfg:
   target_pixel_size: 4000
   color_map: 'jet' # Options: 'plasma', 'viridis', 'inferno', 'jet'
 
-modelDatasetCfg:
-  date_start: 2024-01-01
-  date_end: 2024-12-31
+modelDataCfg:
   area: "string"
+  num_workers: 30
+  output_dir: "Data"
 
 modelDataLoaderCfg:
   batch_size: 64
   shuffle: true
   num_workers: 4
   train_split: 0.8 # Proportion of data used for training
+  start_date: 2024-03-01
+  end_date: 2024-03-02
+  date_step: 1
+
+modelDataProcessorCfg:
+  min_len: 10
+  max_len: 100
+  output_dir: "Data"
+  masking_strategy: "POINT_MISSING"
+  masking_percentage: 0.1

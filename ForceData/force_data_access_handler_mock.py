@@ -7,7 +7,7 @@ import datetime
 # Import the tqdm library
 from tqdm import tqdm
 
-from Types.area import Area
+from ForceTypes.area import Area
 
 
 class ForceDataAccessHandlerMock(IForceDataAccessHandler):

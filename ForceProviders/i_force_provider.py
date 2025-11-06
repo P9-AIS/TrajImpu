@@ -1,6 +1,6 @@
 import numpy as np
-from Types.params import Params
-from Types.vec3 import Vec3
+from ForceTypes.params import Params
+from ForceTypes.vec3 import Vec3
 from abc import ABC, abstractmethod
 
 

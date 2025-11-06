@@ -3,7 +3,7 @@ from pyproj import Transformer, Geod
 import math
 import wmm2020
 
-from Types.vec3 import Vec3
+from ForceTypes.vec3 import Vec3
 
 
 class GeoConverter:

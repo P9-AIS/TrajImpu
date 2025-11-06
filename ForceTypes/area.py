@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from Types.espg3034_coord import Espg3034Coord
+from ForceTypes.espg3034_coord import Espg3034Coord
 
 
 @dataclass

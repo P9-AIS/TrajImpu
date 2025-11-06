@@ -1,6 +1,6 @@
 from ForceProviders.i_force_provider import IForceProvider
-from Types.params import Params
-from Types.vec3 import Vec3
+from ForceTypes.params import Params
+from ForceTypes.vec3 import Vec3
 
 
 class TurnForceProvider(IForceProvider):

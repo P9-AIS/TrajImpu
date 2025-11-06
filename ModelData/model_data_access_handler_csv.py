@@ -1,25 +1,31 @@
 
 
+from dataclasses import dataclass
+
+import pandas as pd
 from ModelData.i_model_data_access_handler import IModelDataAccessHandler
 import os
 import requests
 import zipfile
 from tqdm import tqdm
-import pandas as pd
 import numpy as np
-from dataclasses import dataclass, field
 import datetime as dt
-from ModelData.i_model_data_access_handler import AisMessageTuple
-from Types.vessel_types import VesselType
-from Types.area import Area
-from ModelData.i_model_data_access_handler import Config
+from ModelTypes.ais_dataset_raw import AISDatasetRaw
+from ForceTypes.vessel_types import VesselType
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+
+@dataclass
+class Config:
+    area: str  # ????????????????? needs to be polygon
+    num_workers: int
+    output_dir: str = "Data"
 
 
 class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
     def __init__(self, config: Config):
-        self.config = config
-        self.cols_to_use = {
+        self._cfg = config
+        self._cols_to_use = {
             "Timestamp": True,
             "Type of mobile": False,
             "MMSI": True,
@@ -49,7 +55,7 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
         }
 
    # Download raw data of AISDK and AISUS
-    def download_ais_dataset(self, file_name: str):
+    def _download_ais_dataset(self, file_name: str):
         raw_data_path = "Data/"
         # Step 1: Set base information about raw dataset
         download_url = "http://aisdata.ais.dk/2024/"
@@ -107,7 +113,7 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
             except Exception as e:
                 print(f"Error unzipping the file '{zip_path}': {e}")
         # Unzip the file
-        unzip_file(zip_path, os.path.join(raw_data_path, "csv_files"))
+        unzip_file(zip_path, os.path.join(raw_data_path, "AISDataRaw"))
 
         # Check if CSV file now exists after unzipping
         if not os.path.exists(csv_file_path):
@@ -116,33 +122,28 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
 
         return csv_file_path
 
-    def download_csv_files(self) -> list[str]:
+    def download_csv_files(self, dates: list[dt.date]) -> list[str]:
         # Collect list of file names to download
-        cur_date: dt.date = self.config.date_start
         file_names: list[str] = []
 
-        while cur_date <= self.config.date_end:
-            if cur_date == dt.date(2024, 1, 1) or cur_date == dt.date(2024, 2, 1):
-                file_name = f"aisdk-{cur_date.year}-{cur_date.month:02d}"
-            elif dt.date(2024, 1, 2) <= cur_date <= dt.date(2024, 1, 31) or \
-                    dt.date(2024, 2, 2) <= cur_date <= dt.date(2024, 2, 29):
-                cur_date += dt.timedelta(days=1)
-                continue
-            else:
-                file_name = f"aisdk-{cur_date.year}-{cur_date.month:02d}-{cur_date.day:02d}"
+        for cur_date in dates:
+            if cur_date.month in [1, 2] and cur_date.year == 2024:
+                raise ValueError(f"Date {cur_date} is not available for download.")
+
+            file_name = f"aisdk-{cur_date.year}-{cur_date.month:02d}-{cur_date.day:02d}"
 
             file_names.append(file_name)
             cur_date += dt.timedelta(days=1)
 
         # Parallel download
         csv_paths: list[str] = []
-        num_workers = getattr(self.config, "num_workers", 4)
+        num_workers = getattr(self._cfg, "num_workers", 4)
 
         print(f"Downloading {len(file_names)} AIS files using {num_workers} threads...")
 
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             future_map = {
-                executor.submit(self.download_ais_dataset, fn): fn
+                executor.submit(self._download_ais_dataset, fn): fn
                 for fn in file_names
             }
 
@@ -159,18 +160,18 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
 
     def _col_indexes_to_use(self):
         # Return indices of True columns
-        return [i for i, (col, use) in enumerate(self.cols_to_use.items()) if use]
+        return [i for i, (col, use) in enumerate(self._cols_to_use.items()) if use]
 
     def _col_name_to_index(self, col_name: str):
         """
         Given a column name, return the index it occupies among the
         True-valued fields in self.cols_to_use.
         """
-        if col_name not in self.cols_to_use:
+        if col_name not in self._cols_to_use:
             raise KeyError(f"Column '{col_name}' does not exist in cols_to_use")
 
         # Build the list of columns actually used (True values)
-        true_cols = [name for name, use in self.cols_to_use.items() if use]
+        true_cols = [name for name, use in self._cols_to_use.items() if use]
 
         try:
             return true_cols.index(col_name)
@@ -192,69 +193,56 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
         return float(enum_val.value)
 
     def _coarse_processed_data_filename(self, csv_file_name: str) -> str:
-        fields: str = "_".join([f"{k}" for k, v in self.cols_to_use.items() if v])
-        return f"Data/np_files/{os.path.basename(csv_file_name).replace('.csv', '')}_cols_{fields}.npz"
+        fields: str = "_".join([f"{k}" for k, v in self._cols_to_use.items() if v])
+        return f"{self._cfg.output_dir}/AISDatasetRaw/{os.path.basename(csv_file_name).replace('.csv', '')}_cols_{fields}.npz"
 
-    def get_ais_messages(self) -> list[AisMessageTuple]:
+    def get_ais_messages(self, date: dt.date) -> AISDatasetRaw:
+        csv_file_path = self.download_csv_files([date])[0]
+        np_file_path = self._coarse_processed_data_filename(csv_file_path)
 
-        csv_file_paths = self.download_csv_files()
-        np_file_paths: list[str] = []
+        if os.path.exists(np_file_path):
+            print(f"{np_file_path} np file exists - skipping...")
+            return AISDatasetRaw.load(np_file_path)
 
-        for csv_file_name in tqdm(csv_file_paths, desc="Processing CSV files"):
-            np_filename = self._coarse_processed_data_filename(csv_file_name)
-            np_file_paths.append(np_filename)
+        print("Loading CSV file into DataFrame...")
+        df = pd.read_csv(
+            csv_file_path,
+            delimiter=",",
+            dtype=str,
+            on_bad_lines='warn',  # or 'skip' if you want silent handling
+            usecols=self._col_indexes_to_use(),
+            header=0
+        )
 
-            if os.path.exists(np_filename):
-                print(f"{np_filename} np file exists - skipping...")
-                continue
-                # file_data = np.load(np_filename)
-                # all_filtered_data = np.vstack((all_filtered_data, file_data['filtered_data']))
-            else:
-                print("Loading csv file to np...")
-                raw_data = np.genfromtxt(
-                    csv_file_name,
-                    delimiter=",",
-                    dtype=str,
-                    skip_header=1,
-                    usecols=self._col_indexes_to_use()
-                )
+        # --- Cleaning phase ---
+        print("Filtering unwanted rows...")
+        df = df.replace(["Unknown", "Undefined", "None", ""], np.nan)
+        df = df.dropna()
 
-                # filter unwanted rows
-                mask = ~np.isin(raw_data, ["Unknown", "Undefined", "None", ""]).any(axis=1)
-                filtered_data = raw_data[mask]
+        # --- Parsing phase ---
+        print("Converting vessel type to numeric...")
+        ship_type_col = "Ship type"
+        df[ship_type_col] = df[ship_type_col].apply(self._parse_vessel_type)
 
-                # parse vessel type column
-                print("Converting vessel type to numeric...")
-                vt_idx = self._col_name_to_index("Ship type")
-                filtered_data[:, vt_idx] = [
-                    self._parse_vessel_type(v)
-                    for v in filtered_data[:, vt_idx]
-                ]
+        print("Converting timestamps to UNIX time...")
+        ts_col = "# Timestamp"
+        df[ts_col] = pd.to_datetime(df[ts_col], format="%d/%m/%Y %H:%M:%S", errors="coerce")
+        df = df.dropna(subset=[ts_col])  # drop any rows with invalid timestamps
+        df[ts_col] = df[ts_col].astype("int64") // 10**9  # convert ns → seconds
 
-                print("Converting timestamp to unix time...")
-                # parse datetime
-                time_idx = self._col_name_to_index("Timestamp")
-                filtered_data[:, time_idx] = [
-                    dt.datetime.strptime(v, "%d/%m/%Y %H:%M:%S").timestamp()
-                    for v in filtered_data[:, time_idx]
-                ]
+        # --- Conversion phase ---
+        print("Converting data to floats...")
+        # Convert all columns to float (you may want to skip non-numeric cols if any)
+        for col in df.columns:
+            if col != ts_col:  # timestamp already numeric
+                df[col] = df[col].astype(float)
 
-                # convert to float
-                print("Converting data to floats...")
-                filtered_data = filtered_data.astype(float)
+        # --- Save phase ---
+        print("Saving filtered data to npy file...")
+        data_array = df.to_numpy(dtype=float)
+        dataset = AISDatasetRaw(data_array)
 
-                # save
-                print("Saving filtered data to npy file...")
-                os.makedirs(os.path.dirname(np_filename), exist_ok=True)
-                np.savez_compressed(np_filename, filtered_data=filtered_data)
+        os.makedirs(os.path.dirname(np_file_path), exist_ok=True)
+        dataset.save(np_file_path)
 
-        print("Combining all filtered data...")
-        all_filtered_data = np.empty((0, len(self._col_indexes_to_use())), dtype=float)
-        for np_file in tqdm(np_file_paths, desc="Combining np files"):
-            np_data = np.load(np_file)
-            if np_data:
-                all_filtered_data = np.vstack((all_filtered_data, np_data['filtered_data']))
-
-        print("Converting filtered data to AisMessageTuple list...")
-        all_messages = list(AisMessageTuple(*row) for row in all_filtered_data)
-        return all_messages
+        return dataset

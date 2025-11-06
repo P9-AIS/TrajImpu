@@ -1,12 +1,12 @@
-from Types.tilemap import Tilemap
-from Types.vec3 import Vec3
+from ForceTypes.tilemap import Tilemap
+from ForceTypes.vec3 import Vec3
 import os
-from Types.vec3 import Vec3
+from ForceTypes.vec3 import Vec3
 import datetime
 from dataclasses import dataclass
 import numpy as np
 import matplotlib.pyplot as plt
-from Types.vec3 import Vec3
+from ForceTypes.vec3 import Vec3
 from PIL import Image
 
 
@@ -19,8 +19,6 @@ class Config:
 
 def generate_heatmap_image(vectormap: tuple[np.ndarray, np.ndarray], cfg):
     print("Generating heatmap image...")
-
-    os.makedirs(cfg.output_dir, exist_ok=True)
 
     vx, vy = vectormap
     force_magnitudes = np.sqrt(vx**2 + vy**2)

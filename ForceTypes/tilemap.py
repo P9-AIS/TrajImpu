@@ -1,9 +1,10 @@
+import os
 import pickle
 from typing import Tuple, Callable, Union
 import math
 
 import numpy as np
-from Types.area import Area
+from ForceTypes.area import Area
 from ForceUtils.geo_converter import GeoConverter as gc
 
 
@@ -95,6 +96,7 @@ class Tilemap:
         self._tile_size *= scale
 
     def save(self, path: str):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         print(f"Saving tile map to '{path}'")
         np.savez_compressed(
             path,

@@ -1,11 +1,11 @@
 import math
-from Types.area import Area
+from ForceTypes.area import Area
 from ForceProviders.i_force_provider import IForceProvider
-from Types.tilemap import Tilemap
-from Types.params import Params
-from Types.vec3 import Vec3
+from ForceTypes.tilemap import Tilemap
+from ForceTypes.params import Params
+from ForceTypes.vec3 import Vec3
 from dataclasses import dataclass, field, replace
-from Types.vessel_types import VesselType
+from ForceTypes.vessel_types import VesselType
 import datetime as dt
 import os
 import numpy as np
@@ -19,7 +19,7 @@ from ForceUtils.geo_converter import GeoConverter as gc
 class Config:
     start_date: dt.date
     end_date: dt.date
-    sample_rate: int
+    date_step: int
     area: Area
     vessel_types: list[VesselType]
     base_tile_size_m: int = 50
@@ -76,7 +76,7 @@ class TrafficForceProvider(IForceProvider):
         cur_date = self._cfg.start_date
         while cur_date <= self._cfg.end_date:
             days.append(cur_date)
-            cur_date = cur_date + dt.timedelta(self._cfg.sample_rate)
+            cur_date = cur_date + dt.timedelta(self._cfg.date_step)
 
         ais_messages = self._data_handler.get_ais_messages_no_stops(days, self._cfg.area)
 
@@ -120,7 +120,7 @@ class TrafficForceProvider(IForceProvider):
 
     @staticmethod
     def _get_tilemap_file_name(tilemap_dir: str, cfg: Config):
-        return (f"{tilemap_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.sample_rate=}-{cfg.base_tile_size_m=}-{cfg.down_scale_factor=}.npz")
+        return (f"{tilemap_dir}/{cfg.start_date=}-{cfg.end_date=}-{cfg.date_step=}-{cfg.base_tile_size_m=}-{cfg.down_scale_factor=}.npz")
 
     def get_vectormap(self) -> tuple[np.ndarray, np.ndarray]:
         return self._vectormap

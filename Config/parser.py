@@ -3,11 +3,12 @@ from Config.visitor import ConfigVisitorRegistry
 from Connection.postgres_connection import Config as PostgresConfig
 from ForceProviders.force_provider_traffic import Config as TrafficForceProviderConfig
 from ForceProviders.force_provider_depth import Config as DepthForceProviderConfig
-from Types.espg3034_coord import Espg3034Coord
-from Types.area import Area
+from ForceTypes.espg3034_coord import Espg3034Coord
+from ForceTypes.area import Area
 from ForceUtils.heatmap_generator import Config as HeatmapGeneratorConfig
 from ModelUtils.data_loader import Config as ModelDataLoaderConfig
-from ModelData.i_model_data_access_handler import Config as ModelDatasetConfig
+from ModelData.model_data_access_handler_csv import Config as ModelDataConfig
+from ModelUtils.data_processor import MaskingStrategy, Config as ModelProcessorConfig
 from dataclasses import dataclass
 
 
@@ -18,7 +19,8 @@ class Config:
     depthForceProviderCfg: DepthForceProviderConfig
     heatmapGeneratorCfg: HeatmapGeneratorConfig
     modelDataLoaderCfg: ModelDataLoaderConfig
-    modelDatasetCfg: ModelDatasetConfig
+    modelDataCfg: ModelDataConfig
+    modelDataProcessorCfg: ModelProcessorConfig
 
 
 def parse_config(path: str) -> Config:
@@ -33,7 +35,8 @@ def parse_config(path: str) -> Config:
             DepthForceProviderConfig, cfg_dict["depthForceProviderCfg"]),
         heatmapGeneratorCfg=ConfigVisitorRegistry.visit(HeatmapGeneratorConfig, cfg_dict["heatmapGeneratorCfg"]),
         modelDataLoaderCfg=ConfigVisitorRegistry.visit(ModelDataLoaderConfig, cfg_dict["modelDataLoaderCfg"]),
-        modelDatasetCfg=ConfigVisitorRegistry.visit(ModelDatasetConfig, cfg_dict["modelDatasetCfg"]),
+        modelDataCfg=ConfigVisitorRegistry.visit(ModelDataConfig, cfg_dict["modelDataCfg"]),
+        modelDataProcessorCfg=ConfigVisitorRegistry.visit(ModelProcessorConfig, cfg_dict["modelDataProcessorCfg"]),
     )
 
 
@@ -47,7 +50,7 @@ ConfigVisitorRegistry.register(
     lambda data: TrafficForceProviderConfig(
         start_date=data["start_date"],
         end_date=data["end_date"],
-        sample_rate=data["sample_rate"],
+        date_step=data["date_step"],
         area=ConfigVisitorRegistry.visit(Area, data["area"]),
         vessel_types=data["vessel_types"],
         base_tile_size_m=data["base_tile_size_m"],
@@ -98,6 +101,17 @@ ConfigVisitorRegistry.register(
 )
 
 ConfigVisitorRegistry.register(
-    ModelDatasetConfig,
-    lambda data: ModelDatasetConfig(**data)
+    ModelDataConfig,
+    lambda data: ModelDataConfig(**data)
+)
+
+ConfigVisitorRegistry.register(
+    ModelProcessorConfig,
+    lambda data: ModelProcessorConfig(
+        min_len=data["min_len"],
+        max_len=data["max_len"],
+        output_dir=data["output_dir"],
+        masking_strategy=MaskingStrategy[data["masking_strategy"]],
+        masking_percentage=data["masking_percentage"],
+    )
 )
