@@ -13,6 +13,7 @@ from ModelData.i_model_data_access_handler import AisMessageTuple
 from Types.vessel_types import VesselType
 from Types.area import Area
 from ModelData.i_model_data_access_handler import Config
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
@@ -49,14 +50,14 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
 
    # Download raw data of AISDK and AISUS
     def download_ais_dataset(self, file_name: str):
-        raw_data_path = "ModelData/"
+        raw_data_path = "Data/"
         # Step 1: Set base information about raw dataset
         download_url = "http://aisdata.ais.dk/2024/"
         csv_file_name = f"{file_name}.csv"
         print(csv_file_name)
 
         # Step 2: Check if CSV file already exists
-        csv_file_path = os.path.join(raw_data_path, "csv_files", csv_file_name)
+        csv_file_path = os.path.join(raw_data_path, "AISDataRaw", csv_file_name)
 
         if os.path.exists(csv_file_path):
             print(f"CSV file '{csv_file_path}' already exists. No download needed.")
@@ -86,12 +87,12 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
         # First attempt
         if not os.path.exists(raw_data_path):
             os.makedirs(raw_data_path)
-        zip_path = os.path.join(raw_data_path, "zip_files", f"{file_name}.zip")
+        zip_path = os.path.join(raw_data_path, "AISDataRaw", f"{file_name}.zip")
         url = download_url + file_name + ".zip"
         if not attempt_download(url, zip_path):
             # Second attempt
             url = download_url + file_name[:-3] + ".zip"
-            zip_path = os.path.join(raw_data_path, "zip_files", f"{file_name[:-3]}.zip")
+            zip_path = os.path.join(raw_data_path, "AISDataRaw", f"{file_name[:-3]}.zip")
             if not attempt_download(url, zip_path):
                 print(f"Error: Unable to download the file for {file_name}. The file may not exist.")
                 return None
@@ -116,22 +117,45 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
         return csv_file_path
 
     def download_csv_files(self) -> list[str]:
+        # Collect list of file names to download
         cur_date: dt.date = self.config.date_start
-        csv_file_paths: list[str] = []
+        file_names: list[str] = []
+
         while cur_date <= self.config.date_end:
-            file_name: str
-            if cur_date == dt.date(2024, 1, 1) or cur_date == dt.date(2024, 2, 1):  # One month in each file...
-                file_name: str = f"aisdk-{cur_date.year}-{cur_date.month:02d}"
-            elif dt.date(2024, 1, 2) <= cur_date <= dt.date(2024, 1, 31) or dt.date(2024, 2, 2) <= cur_date <= dt.date(2024, 2, 29):
+            if cur_date == dt.date(2024, 1, 1) or cur_date == dt.date(2024, 2, 1):
+                file_name = f"aisdk-{cur_date.year}-{cur_date.month:02d}"
+            elif dt.date(2024, 1, 2) <= cur_date <= dt.date(2024, 1, 31) or \
+                    dt.date(2024, 2, 2) <= cur_date <= dt.date(2024, 2, 29):
+                cur_date += dt.timedelta(days=1)
                 continue
             else:
-                file_name: str = f"aisdk-{cur_date.year}-{cur_date.month:02d}-{cur_date.day:02d}"
+                file_name = f"aisdk-{cur_date.year}-{cur_date.month:02d}-{cur_date.day:02d}"
 
-            path = self.download_ais_dataset(file_name)
-            if path:
-                csv_file_paths.append(path)
+            file_names.append(file_name)
             cur_date += dt.timedelta(days=1)
-        return csv_file_paths
+
+        # Parallel download
+        csv_paths: list[str] = []
+        num_workers = getattr(self.config, "num_workers", 4)
+
+        print(f"Downloading {len(file_names)} AIS files using {num_workers} threads...")
+
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            future_map = {
+                executor.submit(self.download_ais_dataset, fn): fn
+                for fn in file_names
+            }
+
+            for future in as_completed(future_map):
+                fname = future_map[future]
+                try:
+                    result = future.result()
+                    if result:
+                        csv_paths.append(result)
+                except Exception as e:
+                    print(f"Download failed for {fname}: {e}")
+
+        return csv_paths
 
     def _col_indexes_to_use(self):
         # Return indices of True columns
@@ -167,26 +191,28 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
         enum_val = VesselType.__members__.get(key, VesselType.UNKNOWN)
         return float(enum_val.value)
 
-    def _coarse_processed_data_filename(self, start: dt.date, end: dt.date) -> str:
+    def _coarse_processed_data_filename(self, csv_file_name: str) -> str:
         fields: str = "_".join([f"{k}" for k, v in self.cols_to_use.items() if v])
-        return f"ModelData/np_files/ais_data_{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}_{fields}_coarse.npy"
+        return f"Data/np_files/{os.path.basename(csv_file_name).replace('.csv', '')}_cols_{fields}.npz"
 
     def get_ais_messages(self) -> list[AisMessageTuple]:
 
-        np_filename = self._coarse_processed_data_filename(self.config.date_start, self.config.date_end)
         csv_file_paths = self.download_csv_files()
-        all_filtered_data = []
+        np_file_paths: list[str] = []
 
-        if os.path.exists(np_filename):
-            print("Loading filtered data from npy file...")
-            all_filtered_data = np.load(np_filename)
-        else:
-            print("Processing CSV files to generate npy file...")
-            filtered_chunks = []
-            for file in tqdm(csv_file_paths, desc="Processing csv files"):
+        for csv_file_name in tqdm(csv_file_paths, desc="Processing CSV files"):
+            np_filename = self._coarse_processed_data_filename(csv_file_name)
+            np_file_paths.append(np_filename)
+
+            if os.path.exists(np_filename):
+                print(f"{np_filename} np file exists - skipping...")
+                continue
+                # file_data = np.load(np_filename)
+                # all_filtered_data = np.vstack((all_filtered_data, file_data['filtered_data']))
+            else:
                 print("Loading csv file to np...")
                 raw_data = np.genfromtxt(
-                    file,
+                    csv_file_name,
                     delimiter=",",
                     dtype=str,
                     skip_header=1,
@@ -216,17 +242,18 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
                 # convert to float
                 print("Converting data to floats...")
                 filtered_data = filtered_data.astype(float)
-                filtered_chunks.append(filtered_data)
 
-            if filtered_chunks:
-                all_filtered_data = np.vstack(filtered_chunks)
-            else:
-                n_cols = len(self._col_indexes_to_use())
-                all_filtered_data = np.empty((0, n_cols), dtype=float)
+                # save
+                print("Saving filtered data to npy file...")
+                os.makedirs(os.path.dirname(np_filename), exist_ok=True)
+                np.savez_compressed(np_filename, filtered_data=filtered_data)
 
-            # save
-            print("Saving filtered data to npy file...")
-            np.save(np_filename, all_filtered_data)
+        print("Combining all filtered data...")
+        all_filtered_data = np.empty((0, len(self._col_indexes_to_use())), dtype=float)
+        for np_file in tqdm(np_file_paths, desc="Combining np files"):
+            np_data = np.load(np_file)
+            if np_data:
+                all_filtered_data = np.vstack((all_filtered_data, np_data['filtered_data']))
 
         print("Converting filtered data to AisMessageTuple list...")
         all_messages = list(AisMessageTuple(*row) for row in all_filtered_data)

@@ -21,12 +21,21 @@ class Config:
 class AisDataLoader:
     @staticmethod
     def get_data_loaders(cfg: Config, data_handler: IModelDataAccessHandler) -> tuple[DataLoader, DataLoader]:
-        train_filepath = f"ModelData/pkl_files/train_loader{AisDataLoader.data_loader_file_name_postfix(cfg, data_handler.config)}.pkl"
-        test_filepath = f"ModelData/pkl_files/test_loader{AisDataLoader.data_loader_file_name_postfix(cfg, data_handler.config)}.pkl"
+        train_filepath = f"Data/pkl_files/train_loader{AisDataLoader.data_loader_file_name_postfix(cfg, data_handler.config)}.pkl"
+        test_filepath = f"Data/pkl_files/test_loader{AisDataLoader.data_loader_file_name_postfix(cfg, data_handler.config)}.pkl"
 
         if os.path.exists(train_filepath) and os.path.exists(test_filepath):
             print("Loading data loaders from files...")
-            return torch.load(train_filepath), torch.load(test_filepath)
+            train_data = torch.load(train_filepath)
+            test_data = torch.load(test_filepath)
+
+            train_loader = DataLoader(train_data, batch_size=cfg.batch_size,
+                                      shuffle=cfg.shuffle,
+                                      num_workers=cfg.num_workers)
+            test_loader = DataLoader(test_data, batch_size=cfg.batch_size,
+                                     shuffle=cfg.shuffle,
+                                     num_workers=cfg.num_workers)
+            return train_loader, test_loader
         else:
             print("Data loaders does not exist. Creating new data loaders...")
             coarse_dataset = data_handler.get_ais_messages()
@@ -38,7 +47,12 @@ class AisDataLoader:
                 train_dataset)
             test_data = AisDataLoader.process_dataset(
                 test_dataset)
+            # print("Saving processed datasets to files...")
+            # # save loads to pkl files
+            # torch.save(train_data, train_filepath)
+            # torch.save(test_data, test_filepath)
 
+            print("Creating torch dataloaders...")
             train_loader = DataLoader(
                 train_data,
                 batch_size=cfg.batch_size,
@@ -51,12 +65,7 @@ class AisDataLoader:
                 shuffle=cfg.shuffle,
                 num_workers=cfg.num_workers
             )
-            print("Saving data loaders to files...")
-            # save loads to pkl files
-            torch.save(
-                train_loader, train_filepath)
-            torch.save(
-                test_loader, test_filepath)
+
             return train_loader, test_loader
 
     @staticmethod

@@ -19,6 +19,7 @@ def main():
 
     # generate_heatmap_image(prov_traffic.get_vectormap(), cfg.heatmapGeneratorCfg)
     data_handler = ModelDataAccessHandlerCSV(cfg.modelDatasetCfg)
+    # data_handler.get_ais_messages()
     train_loader, test_loader = AisDataLoader.get_data_loaders(cfg.modelDataLoaderCfg, data_handler)
     print("well well well...")
     # prov_depth = DepthForceProvider(DataAccessHandler(PostgresConnection(cfg.postgresCfg)), cfg.depthForceProviderCfg)

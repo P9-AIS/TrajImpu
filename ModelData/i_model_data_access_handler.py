@@ -13,6 +13,7 @@ class Config:
     date_start: dt.date
     date_end: dt.date
     area: str  # ????????????????? needs to be polygon
+    num_workers: int
 
 
 class IModelDataAccessHandler(ABC):
