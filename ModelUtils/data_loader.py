@@ -1,5 +1,5 @@
 from torch.utils.data import DataLoader
-from ModelTypes.ais_dataset import AISDatasetProcessed
+from ModelTypes.ais_dataset_masked import AISDatasetMasked
 from ModelUtils.data_processor import DataProcessor
 from dataclasses import dataclass
 import datetime as dt
@@ -29,7 +29,7 @@ class AisDataLoader:
         dates = [self._cfg.start_date + dt.timedelta(days=i)
                  for i in range(0, (self._cfg.end_date - self._cfg.start_date).days + 1, self._cfg.date_step)]
 
-        dataset = self._data_processor.get_processed_data(dates)
+        dataset = self._data_processor.get_masked_data(dates)
 
         train_data, test_data = AisDataLoader.split_dataset(
             self._cfg.train_split, dataset)
@@ -43,7 +43,7 @@ class AisDataLoader:
         return train_loader, test_loader
 
     @staticmethod
-    def split_dataset(train_split: float, dataset: AISDatasetProcessed) -> tuple[AISDatasetProcessed, AISDatasetProcessed]:
+    def split_dataset(train_split: float, dataset: AISDatasetMasked) -> tuple[AISDatasetMasked, AISDatasetMasked]:
         indices = np.arange(len(dataset))
         np.random.default_rng(seed=42).shuffle(indices)
         train_size = int(len(indices) * train_split)
@@ -52,11 +52,11 @@ class AisDataLoader:
         test_indices = indices[train_size:]
 
         def extract_subset(idxs):
-            return AISDatasetProcessed(
+            return AISDatasetMasked(
                 dataset.data[idxs],
                 dataset.labels[idxs],
                 dataset.masks[idxs],
-                dataset.padding_masks[idxs],
-            )
+                dataset.num_masked_values,
+                dataset.num_values_in_sequence,)
 
         return extract_subset(train_indices), extract_subset(test_indices)

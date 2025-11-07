@@ -4,11 +4,11 @@ import pickle
 
 
 class AISDatasetRaw:
-    _dataset: np.ndarray
+    dataset: np.ndarray
 
     def __init__(self, data: np.ndarray):
         if data is not None:
-            self._dataset = data
+            self.dataset = data
         else:
             raise ValueError("Data must be provided to initialize AisDatasetRaw")
 
@@ -18,20 +18,20 @@ class AISDatasetRaw:
         np.savez_compressed(
             path,
             raw_ais_dataset_object=pickle.dumps(self, protocol=pickle.HIGHEST_PROTOCOL),
-            dataset=self._dataset
+            dataset=self.dataset
         )
-        print(f"Saved raw ais dataset of size {self._dataset.size}\n")
+        print(f"Saved raw ais dataset of size {self.dataset.size}\n")
 
     @staticmethod
     def load(path: str) -> "AISDatasetRaw":
         print(f"Loading raw ais dataset from '{path}'")
         with np.load(path, allow_pickle=True) as data:
             dataset: AISDatasetRaw = pickle.loads(data['raw_ais_dataset_object'].item())
-            dataset._dataset = data['dataset']
-        print(f"Loaded raw ais dataset of size {dataset._dataset.size}\n")
+            dataset.dataset = data['dataset']
+        print(f"Loaded raw ais dataset of size {dataset.dataset.size}\n")
         return dataset
 
     # method to combine two AisDatasetRaw objects
     def combine(self, other: "AISDatasetRaw") -> "AISDatasetRaw":
-        combined_data = np.vstack((self._dataset, other._dataset))
+        combined_data = np.vstack((self.dataset, other.dataset))
         return AISDatasetRaw(combined_data)

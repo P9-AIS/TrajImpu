@@ -5,7 +5,7 @@ from Model.ais_encoder import HeterogeneousAttributeEncoder
 from Model.afa_module import AFAModule
 from Model.brits import BRITS
 from Model.ais_decoder import AISDecoder
-from ModelTypes.ais_dataset import AISBatch
+from ModelTypes.ais_dataset_masked import AISBatch
 
 
 @dataclass

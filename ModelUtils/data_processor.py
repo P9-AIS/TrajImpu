@@ -1,12 +1,15 @@
 
 import os
 from ModelData.i_model_data_access_handler import IModelDataAccessHandler
-from ModelTypes.ais_dataset import AISDatasetProcessed
+from ModelTypes.ais_dataset_masked import AISDatasetMasked
+from ModelTypes.ais_dataset_processed import AISDatasetProcessed
 from ModelTypes.ais_dataset_raw import AISDatasetRaw
 import datetime as dt
 import numpy as np
 from enum import Enum
 from dataclasses import dataclass
+
+from ModelUtils.geo_utils import GeoUtils
 
 
 class MaskingStrategy(Enum):
@@ -17,25 +20,44 @@ class MaskingStrategy(Enum):
 
 @dataclass
 class Config:
-    min_len: int
-    max_len: int
+    traj_len: int = 100
+    lead_len: int = 10
     output_dir: str = "Data"
     masking_strategy: MaskingStrategy = MaskingStrategy.POINT_MISSING
     masking_percentage: float = 0.1
+    max_time_gap: float = 600.0
+    min_traj_gap_distance_m: float = 0.0
+    max_traj_gap_distance_m: float = 50.0
 
 
 class DataProcessor:
     _data_handler: IModelDataAccessHandler
     _cfg: Config
+    _rng: np.random.Generator
+    _num_masked_values: int
 
     def __init__(self, data_handler: IModelDataAccessHandler, cfg: Config):
         self._data_handler = data_handler
         self._cfg = cfg
+        self._rng = np.random.default_rng()
+        self._num_masked_values = int(self._cfg.masking_percentage * self._cfg.traj_len)
 
-    def get_processed_data(self, dates: list[dt.date]) -> AISDatasetProcessed:
+        if (self._cfg.lead_len * 2) / self._cfg.traj_len < self._cfg.masking_percentage:
+            raise ValueError("Masking percentage is too high for the given lead length and trajectory length.")
+
+    def get_masked_data(self, dates: list[dt.date]) -> AISDatasetMasked:
+        processed_data = self._get_processed_data(dates)
+        masks = self._get_masks(processed_data)
+
+        masked_data = AISDatasetMasked.from_ais_dataset_processed(
+            processed_data, masks, self._num_masked_values, self._cfg.traj_len)
+
+        return masked_data
+
+    def _get_processed_data(self, dates: list[dt.date]) -> AISDatasetProcessed:
         processed_data_file_paths = self._download_processed_data(dates)
 
-        dataset = AISDatasetProcessed(np.empty((0,)), np.empty((0,)), np.empty((0,)), 0, 0)
+        dataset = AISDatasetProcessed(np.empty((0,)), np.empty((0,)))
 
         for path in processed_data_file_paths:
             if os.path.exists(path):
@@ -64,52 +86,107 @@ class DataProcessor:
         return processed_data_file_paths
 
     def _get_dataset_filename(self, date: dt.date) -> str:
-        return f"{self._cfg.output_dir}/AISDatasetProcessed/{self._cfg.min_len=}-{self._cfg.max_len=}-date={date}.pkl"
+        return f"{self._cfg.output_dir}/AISDatasetProcessed/{self._cfg.traj_len=}-date={date}.pkl"
 
     def _process_dataset(self, dataset: AISDatasetRaw) -> AISDatasetProcessed:
         data = self._get_data(dataset)
         labels = self._get_labels(dataset)
-        masks = self._get_masks(dataset)
-
-        d = AISDatasetProcessed(data, labels, masks, 0, 0)
-        return d
+        return AISDatasetProcessed(data, labels)
 
     def _get_data(self, dataset: AISDatasetRaw) -> np.ndarray:
-        match self._cfg.masking_strategy:
-            case MaskingStrategy.POINT_MISSING:
-                pass
-            case MaskingStrategy.SUB_SEQUENCE_MISSING:
-                pass
-            case MaskingStrategy.BLOCK_MISSING:
-                pass
         return np.array([])
 
     def _get_labels(self, dataset: AISDatasetRaw) -> np.ndarray:
-        match self._cfg.masking_strategy:
-            case MaskingStrategy.POINT_MISSING:
-                pass
-            case MaskingStrategy.SUB_SEQUENCE_MISSING:
-                pass
-            case MaskingStrategy.BLOCK_MISSING:
-                pass
         return np.array([])
 
-    def _get_masks(self, dataset: AISDatasetRaw) -> np.ndarray:
+    def _get_masks(self, dataset: AISDatasetProcessed) -> np.ndarray:
+        batch_size = dataset.data.shape[0]
+        seq_length = dataset.data.shape[1]
+        num_attributes = dataset.data.shape[2]
+
+        masks = np.ones((batch_size, seq_length, num_attributes), dtype=np.float32)
+
         match self._cfg.masking_strategy:
             case MaskingStrategy.POINT_MISSING:
-                pass
-            case MaskingStrategy.SUB_SEQUENCE_MISSING:
-                pass
+                for i in range(batch_size):
+                    missing_indices = self._rng.choice(
+                        range(self._cfg.lead_len, seq_length - self._cfg.lead_len),
+                        self._num_masked_values,
+                        replace=False)
+                    masks[i, missing_indices, :] = 0.0
+                return masks
             case MaskingStrategy.BLOCK_MISSING:
-                pass
-        return np.array([])
+                for i in range(batch_size):
+                    missing_indices = np.arange(self._num_masked_values) + self._cfg.lead_len + \
+                        self._rng.integers(0, seq_length - self._cfg.lead_len - self._num_masked_values)
+                    masks[i, missing_indices, :] = 0.0
+        return masks
 
     @staticmethod
     def _group_dataset(dataset: AISDatasetRaw) -> list[AISDatasetRaw]:
-        # grouped = {}
-        # for message in dataset:
-        #     if message.mmsi not in grouped:
-        #         grouped[message.mmsi] = []
-        #     grouped[message.mmsi].append(message)
-        # return list(grouped.values())
-        return []
+        data = dataset.dataset
+        mmsi_index = 1
+        unique_mmsis = np.unique(data[:, mmsi_index])
+
+        groups: list[AISDatasetRaw] = []
+        for mmsi in unique_mmsis:
+            group_data = data[data[:, mmsi_index] == mmsi]
+            groups.append(AISDatasetRaw(group_data))
+
+        return groups
+
+    def _get_trajectories_from_group(self, group: AISDatasetRaw, traj_len: int) -> list[np.ndarray]:
+        data = group.dataset
+        candidate_trajectories = []
+
+        # data_sorted = data[np.argsort(data[:, 0])]
+
+        cur_traj_len = 1
+        for i in range(1, data.shape[0]):
+            if self._is_trajectory_cut(data[i - 1], data[i]):
+                if cur_traj_len >= traj_len:
+                    candidate_trajectories.append(data[i - cur_traj_len:i])
+                cur_traj_len = 1
+            else:
+                cur_traj_len += 1
+
+        same_length_trajectories = []
+
+        # overlapping sub-trajectories
+        # for traj in candidate_trajectories:
+        #     for start_idx in range(0, traj.shape[0] - traj_len + 1):
+        #         same_length_trajectories.append(traj[start_idx:start_idx + traj_len])
+
+        # non-overlapping sub-trajectories
+        for traj in candidate_trajectories:
+            num_full_trajs = traj.shape[0] // traj_len
+            for n in range(num_full_trajs):
+                start_idx = n * traj_len
+                same_length_trajectories.append(traj[start_idx:start_idx + traj_len])
+
+        valid_trajectories = []
+        for traj in same_length_trajectories:
+            if self.is_valid_trajectory(traj):
+                valid_trajectories.append(traj)
+
+        return valid_trajectories
+
+    def _is_trajectory_cut(self, point_1: np.ndarray, point_2: np.ndarray) -> bool:
+        time_1 = point_1[0]
+        time_2 = point_2[0]
+        time_gap = time_2 - time_1
+
+        if time_gap > self._cfg.max_time_gap:
+            return True
+
+        loc_1 = point_1[2:4]
+        loc_2 = point_2[2:4]
+        distance = GeoUtils.haversine_distance_km(loc_1[0], loc_1[1], loc_2[0], loc_2[1]) * 1000.0
+
+        if not (self._cfg.min_traj_gap_distance_m <= distance <= self._cfg.max_traj_gap_distance_m):
+            return True
+
+        return False
+
+    def is_valid_trajectory(self, trajectory: np.ndarray) -> bool:
+        return True
