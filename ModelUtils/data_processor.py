@@ -35,7 +35,7 @@ class DataProcessor:
     def get_processed_data(self, dates: list[dt.date]) -> AISDatasetProcessed:
         processed_data_file_paths = self._download_processed_data(dates)
 
-        dataset = AISDatasetProcessed(np.empty((0,)), np.empty((0,)), np.empty((0,)), np.empty((0,)))
+        dataset = AISDatasetProcessed(np.empty((0,)), np.empty((0,)), np.empty((0,)), 0, 0)
 
         for path in processed_data_file_paths:
             if os.path.exists(path):
@@ -70,9 +70,8 @@ class DataProcessor:
         data = self._get_data(dataset)
         labels = self._get_labels(dataset)
         masks = self._get_masks(dataset)
-        padding_masks = self._get_padding_masks(dataset)
 
-        d = AISDatasetProcessed(data, labels, masks, padding_masks)
+        d = AISDatasetProcessed(data, labels, masks, 0, 0)
         return d
 
     def _get_data(self, dataset: AISDatasetRaw) -> np.ndarray:
@@ -96,16 +95,6 @@ class DataProcessor:
         return np.array([])
 
     def _get_masks(self, dataset: AISDatasetRaw) -> np.ndarray:
-        match self._cfg.masking_strategy:
-            case MaskingStrategy.POINT_MISSING:
-                pass
-            case MaskingStrategy.SUB_SEQUENCE_MISSING:
-                pass
-            case MaskingStrategy.BLOCK_MISSING:
-                pass
-        return np.array([])
-
-    def _get_padding_masks(self, dataset: AISDatasetRaw) -> np.ndarray:
         match self._cfg.masking_strategy:
             case MaskingStrategy.POINT_MISSING:
                 pass

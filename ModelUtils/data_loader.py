@@ -18,28 +18,34 @@ class Config:
 
 
 class AisDataLoader:
-    @staticmethod
-    def get_data_loaders(cfg: Config, data_processor: DataProcessor) -> tuple[DataLoader, DataLoader]:
-        dates = [cfg.start_date + dt.timedelta(days=i)
-                 for i in range(0, (cfg.end_date - cfg.start_date).days + 1, cfg.date_step)]
+    _data_processor: DataProcessor
+    _cfg: Config
 
-        dataset = data_processor.get_processed_data(dates)
+    def __init__(self, data_processor: DataProcessor, config: Config):
+        self._cfg = config
+        self._data_processor = data_processor
+
+    def get_data_loaders(self) -> tuple[DataLoader, DataLoader]:
+        dates = [self._cfg.start_date + dt.timedelta(days=i)
+                 for i in range(0, (self._cfg.end_date - self._cfg.start_date).days + 1, self._cfg.date_step)]
+
+        dataset = self._data_processor.get_processed_data(dates)
 
         train_data, test_data = AisDataLoader.split_dataset(
-            cfg.train_split, dataset)
+            self._cfg.train_split, dataset)
 
-        train_loader = DataLoader(train_data, batch_size=cfg.batch_size,
-                                  shuffle=cfg.shuffle,
-                                  num_workers=cfg.num_workers)
-        test_loader = DataLoader(test_data, batch_size=cfg.batch_size,
-                                 shuffle=cfg.shuffle,
-                                 num_workers=cfg.num_workers)
+        train_loader = DataLoader(train_data, batch_size=self._cfg.batch_size,
+                                  shuffle=self._cfg.shuffle,
+                                  num_workers=self._cfg.num_workers)
+        test_loader = DataLoader(test_data, batch_size=self._cfg.batch_size,
+                                 shuffle=self._cfg.shuffle,
+                                 num_workers=self._cfg.num_workers)
         return train_loader, test_loader
 
     @staticmethod
     def split_dataset(train_split: float, dataset: AISDatasetProcessed) -> tuple[AISDatasetProcessed, AISDatasetProcessed]:
         indices = np.arange(len(dataset))
-        np.random.shuffle(indices)
+        np.random.default_rng(seed=42).shuffle(indices)
         train_size = int(len(indices) * train_split)
 
         train_indices = indices[:train_size]

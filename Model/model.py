@@ -5,6 +5,7 @@ from Model.ais_encoder import HeterogeneousAttributeEncoder
 from Model.afa_module import AFAModule
 from Model.brits import BRITS
 from Model.ais_decoder import AISDecoder
+from ModelTypes.ais_dataset import AISBatch
 
 
 @dataclass
@@ -53,16 +54,15 @@ class Model(nn.Module):
         self.impu_module = BRITS(cfg.seq_len, self.ais_encoding_dim + 3, cfg.dim_rnn_hidden, **cfg.kwargs)
         self.ais_decoder = AISDecoder(self.ais_encoding_dim + 3, cfg.num_ais_attributes)
 
-    def forward(self, ais_data, masks, gap_size):
-        encoded = self.ais_encoder(ais_data)
+    def forward(self, ais_batch: AISBatch):
+        encoded = self.ais_encoder(ais_batch)
         forces, _ = self.afa_module(encoded)
         features = torch.cat((encoded, forces), dim=2)
 
-        b = ais_data.size(0)
-        current_ais_data = ais_data.clone()
-        current_masks = masks.clone()
-        for _ in range(gap_size):
+        current_ais_data = ais_batch.observed_data.clone()
+        current_masks = ais_batch.masks.clone()
 
+        for _ in range(ais_batch.num_missing_values):
             brits_data = prepare_brits_data(current_ais_data, features, current_masks)
 
             imputed = self.impu_module(brits_data, stage="test")["imputed_data"]
@@ -74,13 +74,13 @@ class Model(nn.Module):
             first_forces, _ = self.afa_module(first_encoded)
             first_features = torch.cat((first_encoded, first_forces), dim=2)
 
-            features[torch.arange(b), first_mask_idx, :] = first_features
-            current_masks[torch.arange(b), first_mask_idx, :] = 1
+            features[torch.arange(ais_batch.num_values_in_sequence), first_mask_idx, :] = first_features
+            current_masks[torch.arange(ais_batch.num_values_in_sequence), first_mask_idx, :] = 1
 
         final = self.ais_decoder(features)
-        loss_mae, loss_smape = compute_loss(final, ais_data, masks)
+        loss_total, loss_list = compute_loss(final, ais_batch, ais_batch.masks)
 
-        return loss_mae, loss_smape
+        return loss_total, loss_list
 
 
 def prepare_brits_data(ais_data, encoded_data, masks):

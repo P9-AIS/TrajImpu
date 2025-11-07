@@ -6,9 +6,11 @@ from ForceProviders.force_provider_depth import Config as DepthForceProviderConf
 from ForceTypes.espg3034_coord import Espg3034Coord
 from ForceTypes.area import Area
 from ForceUtils.heatmap_generator import Config as HeatmapGeneratorConfig
+from Model.model import Config as ModelConfig
 from ModelUtils.data_loader import Config as ModelDataLoaderConfig
 from ModelData.model_data_access_handler_csv import Config as ModelDataConfig
 from ModelUtils.data_processor import MaskingStrategy, Config as ModelProcessorConfig
+from ModelPipeline.trainer import Config as ModelTrainerConfig
 from dataclasses import dataclass
 
 
@@ -18,9 +20,11 @@ class Config:
     trafficForceProviderCfg: TrafficForceProviderConfig
     depthForceProviderCfg: DepthForceProviderConfig
     heatmapGeneratorCfg: HeatmapGeneratorConfig
+    modelCfg: ModelConfig
     modelDataLoaderCfg: ModelDataLoaderConfig
     modelDataCfg: ModelDataConfig
     modelDataProcessorCfg: ModelProcessorConfig
+    modelTrainerCfg: ModelTrainerConfig
 
 
 def parse_config(path: str) -> Config:
@@ -34,9 +38,11 @@ def parse_config(path: str) -> Config:
         depthForceProviderCfg=ConfigVisitorRegistry.visit(
             DepthForceProviderConfig, cfg_dict["depthForceProviderCfg"]),
         heatmapGeneratorCfg=ConfigVisitorRegistry.visit(HeatmapGeneratorConfig, cfg_dict["heatmapGeneratorCfg"]),
+        modelCfg=ConfigVisitorRegistry.visit(ModelConfig, cfg_dict["modelCfg"]),
         modelDataLoaderCfg=ConfigVisitorRegistry.visit(ModelDataLoaderConfig, cfg_dict["modelDataLoaderCfg"]),
         modelDataCfg=ConfigVisitorRegistry.visit(ModelDataConfig, cfg_dict["modelDataCfg"]),
         modelDataProcessorCfg=ConfigVisitorRegistry.visit(ModelProcessorConfig, cfg_dict["modelDataProcessorCfg"]),
+        modelTrainerCfg=ConfigVisitorRegistry.visit(ModelTrainerConfig, cfg_dict["modelTrainerCfg"]),
     )
 
 
@@ -114,4 +120,14 @@ ConfigVisitorRegistry.register(
         masking_strategy=MaskingStrategy[data["masking_strategy"]],
         masking_percentage=data["masking_percentage"],
     )
+)
+
+ConfigVisitorRegistry.register(
+    ModelTrainerConfig,
+    lambda data: ModelTrainerConfig(**data)
+)
+
+ConfigVisitorRegistry.register(
+    ModelConfig,
+    lambda data: ModelConfig(**data)
 )

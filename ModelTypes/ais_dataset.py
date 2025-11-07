@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import os
 import pickle
 from torch.utils.data import Dataset
@@ -5,24 +6,34 @@ import torch
 import numpy as np
 
 
+@dataclass
+class AISBatch:
+    observed_data: torch.Tensor
+    observed_labels: torch.Tensor
+    masks: torch.Tensor
+    num_missing_values: int
+    num_values_in_sequence: int
+
+
 class AISDatasetProcessed(Dataset):
-    def __init__(self, data: np.ndarray, labels: np.ndarray, masks: np.ndarray, padding_masks: np.ndarray):
+    def __init__(self, data: np.ndarray, labels: np.ndarray, masks: np.ndarray, num_missing_values: int, num_values_in_sequence: int):
         self.data = data
         self.labels = labels
         self.masks = masks
-        self.padding_masks = padding_masks
+        self.num_missing_values = num_missing_values
+        self.num_values_in_sequence = num_values_in_sequence
 
     def __len__(self):
         return len(self.data)
 
-    def __getitem__(self, idx):
-        s = {
-            "observed_data": torch.tensor(self.data[idx], dtype=torch.float32),  # [maxlen, n]
-            "observed_labels": torch.tensor(self.labels[idx], dtype=torch.float32),  # [maxlen, n]
-            "masks": torch.tensor(self.masks[idx], dtype=torch.bool),  # [maxlen, n]
-            "padding_masks": torch.tensor(self.padding_masks[idx], dtype=torch.bool),  # [maxlen, n]
-        }
-        return s
+    def __getitem__(self, idx) -> AISBatch:
+        return AISBatch(
+            observed_data=torch.tensor(self.data[idx], dtype=torch.float32),  # [maxlen, n]
+            observed_labels=torch.tensor(self.labels[idx], dtype=torch.float32),  # [maxlen, n]
+            masks=torch.tensor(self.masks[idx], dtype=torch.bool),  # [maxlen, n]
+            num_missing_values=self.num_missing_values,  # scalar
+            num_values_in_sequence=self.num_values_in_sequence,  # scalar
+        )
 
     def combine(self, other: "AISDatasetProcessed"):
         self.data = np.vstack((self.data, other.data))
@@ -39,7 +50,6 @@ class AISDatasetProcessed(Dataset):
             data=self.data,
             labels=self.labels,
             masks=self.masks,
-            padding_masks=self.padding_masks,
         )
         print(f"Saved processed ais dataset\n")
 
@@ -51,6 +61,5 @@ class AISDatasetProcessed(Dataset):
             dataset.data = data['data']
             dataset.labels = data['labels']
             dataset.masks = data['masks']
-            dataset.padding_masks = data['padding_masks']
         print(f"Loaded processed ais dataset of size {dataset.data.size}\n")
         return dataset
