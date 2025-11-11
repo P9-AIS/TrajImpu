@@ -5,6 +5,12 @@ import numpy as np
 
 class AISDatasetProcessed():
     def __init__(self, data: np.ndarray, labels: np.ndarray):
+        assert labels.ndim == 3, "Labels must be a 3D numpy array (num_samples, seq_len, num_features)."
+        assert data.ndim == 3, "Data must be a 3D numpy array (num_samples, seq_len, num_features)."
+        assert data.shape[0] == labels.shape[0], "Data and labels must have the same number of samples."
+        assert data.shape[1] == labels.shape[1], "Data and labels must have the same sequence length."
+        assert data.shape[2] == labels.shape[2], "Data and labels must have the same number of features."
+
         self.data = data
         self.labels = labels
 

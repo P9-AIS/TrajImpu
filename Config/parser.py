@@ -114,11 +114,14 @@ ConfigVisitorRegistry.register(
 ConfigVisitorRegistry.register(
     ModelProcessorConfig,
     lambda data: ModelProcessorConfig(
-        min_len=data["min_len"],
-        max_len=data["max_len"],
+        traj_len=data["traj_len"],
+        lead_len=data["lead_len"],
         output_dir=data["output_dir"],
         masking_strategy=MaskingStrategy[data["masking_strategy"]],
         masking_percentage=data["masking_percentage"],
+        max_time_gap=data["max_time_gap"],
+        min_traj_gap_distance_m=data["min_traj_gap_distance_m"],
+        max_traj_gap_distance_m=data["max_traj_gap_distance_m"],
     )
 )
 

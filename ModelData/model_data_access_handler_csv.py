@@ -216,8 +216,8 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
 
         # --- Cleaning phase ---
         print("Filtering unwanted rows...")
-        df = df.replace(["Unknown", "Undefined", "None", ""], np.nan)
-        df = df.dropna()
+        invalid_values = ["Unknown", "Undefined", "None", ""]
+        df = df[~df.isin(invalid_values).any(axis=1)]
 
         # --- Parsing phase ---
         print("Converting vessel type to numeric...")
@@ -226,22 +226,26 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
 
         print("Converting timestamps to UNIX time...")
         ts_col = "# Timestamp"
-        df[ts_col] = pd.to_datetime(df[ts_col], format="%d/%m/%Y %H:%M:%S", errors="coerce")
-        df = df.dropna(subset=[ts_col])  # drop any rows with invalid timestamps
-        df[ts_col] = df[ts_col].astype("int64") // 10**9  # convert ns → seconds
+        df[ts_col] = (
+            pd.to_datetime(df[ts_col], format="%d/%m/%Y %H:%M:%S", errors="coerce")
+            .dropna()
+            .map(lambda x: x.timestamp())
+        )
 
-        # --- Conversion phase ---
         print("Converting data to floats...")
-        # Convert all columns to float (you may want to skip non-numeric cols if any)
         for col in df.columns:
-            if col != ts_col:  # timestamp already numeric
+            if col != ts_col:
                 df[col] = df[col].astype(float)
 
-        # --- Save phase ---
-        print("Saving filtered data to npy file...")
+        print("Filtering out-of-bounds latitude and longitude...")
+        df = df[((df['Latitude'] >= -90) & (df['Latitude'] <= 90)) &
+                ((df['Longitude'] >= -180) & (df['Longitude'] <= 180))]
+
+        print("Converting DataFrame to numpy array...")
         data_array = df.to_numpy(dtype=float)
         dataset = AISDatasetRaw(data_array)
 
+        print("Saving filtered data to npy file...")
         os.makedirs(os.path.dirname(np_file_path), exist_ok=True)
         dataset.save(np_file_path)
 

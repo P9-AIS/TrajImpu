@@ -29,7 +29,7 @@ class Config:
     # brits
     seq_len: int = 64
     dim_rnn_hidden: int = 10
-    kwargs: dict = field(default_factory=lambda: {"MIT": True, "device": "cpu"})
+    MIT: bool = True
 
     # decoder
     dim_hidden: int = 64
@@ -51,7 +51,8 @@ class Model(nn.Module):
         self.ais_encoding_dim = cfg.dim_ais_attr_encoding * cfg.num_ais_attributes
 
         self.afa_module = AFAModule(self.ais_encoding_dim, cfg.num_head, cfg.num_layers)
-        self.impu_module = BRITS(cfg.seq_len, self.ais_encoding_dim + 3, cfg.dim_rnn_hidden, **cfg.kwargs)
+        self.impu_module = BRITS(cfg.seq_len, self.ais_encoding_dim + 3,
+                                 cfg.dim_rnn_hidden, MIT=cfg.MIT, device=cfg.device)
         self.ais_decoder = AISDecoder(self.ais_encoding_dim + 3, cfg.num_ais_attributes)
 
     def forward(self, ais_batch: AISBatch):

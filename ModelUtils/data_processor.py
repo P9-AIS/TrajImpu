@@ -57,13 +57,14 @@ class DataProcessor:
     def _get_processed_data(self, dates: list[dt.date]) -> AISDatasetProcessed:
         processed_data_file_paths = self._download_processed_data(dates)
 
-        dataset = AISDatasetProcessed(np.empty((0,)), np.empty((0,)))
+        if not processed_data_file_paths:
+            raise ValueError("No processed data files were downloaded.")
 
-        for path in processed_data_file_paths:
-            if os.path.exists(path):
-                print(f"Loading processed data from file '{path}'...")
-                processed_data = AISDatasetProcessed.load(path)
-                dataset.combine(processed_data)
+        dataset = AISDatasetProcessed.load(processed_data_file_paths[0])
+
+        for i in range(1, len(processed_data_file_paths)):
+            processed_data = AISDatasetProcessed.load(processed_data_file_paths[i])
+            dataset.combine(processed_data)
 
         return dataset
 
@@ -86,37 +87,46 @@ class DataProcessor:
         return processed_data_file_paths
 
     def _get_dataset_filename(self, date: dt.date) -> str:
-        return f"{self._cfg.output_dir}/AISDatasetProcessed/{self._cfg.traj_len=}-date={date}.pkl"
+        return f"{self._cfg.output_dir}/AISDatasetProcessed/{self._cfg.traj_len=}-date={date}.npz"
 
     def _process_dataset(self, dataset: AISDatasetRaw) -> AISDatasetProcessed:
         data = self._get_data(dataset)
-        labels = self._get_labels(dataset)
-        return AISDatasetProcessed(data, labels)
+        # labels = self._get_labels(dataset)
+        return AISDatasetProcessed(data, data)
 
     def _get_data(self, dataset: AISDatasetRaw) -> np.ndarray:
-        return np.array([])
+        num_attributes = dataset.dataset.shape[1]
+        groups = DataProcessor._group_dataset(dataset)
+
+        trajectories = np.ndarray((0, self._cfg.traj_len, num_attributes), dtype=np.float32)
+
+        for group in groups:
+            group_trajectories = self._get_trajectories_from_group(group, self._cfg.traj_len)
+            if group_trajectories.size > 0:
+                trajectories = np.vstack((trajectories, np.array(group_trajectories, dtype=np.float32)))
+
+        return trajectories
 
     def _get_labels(self, dataset: AISDatasetRaw) -> np.ndarray:
         return np.array([])
 
     def _get_masks(self, dataset: AISDatasetProcessed) -> np.ndarray:
-        batch_size = dataset.data.shape[0]
+        num_trajs = dataset.data.shape[0]
         seq_length = dataset.data.shape[1]
         num_attributes = dataset.data.shape[2]
 
-        masks = np.ones((batch_size, seq_length, num_attributes), dtype=np.float32)
+        masks = np.ones((num_trajs, seq_length, num_attributes), dtype=np.float32)
 
         match self._cfg.masking_strategy:
             case MaskingStrategy.POINT_MISSING:
-                for i in range(batch_size):
+                for i in range(num_trajs):
                     missing_indices = self._rng.choice(
                         range(self._cfg.lead_len, seq_length - self._cfg.lead_len),
                         self._num_masked_values,
                         replace=False)
                     masks[i, missing_indices, :] = 0.0
-                return masks
             case MaskingStrategy.BLOCK_MISSING:
-                for i in range(batch_size):
+                for i in range(num_trajs):
                     missing_indices = np.arange(self._num_masked_values) + self._cfg.lead_len + \
                         self._rng.integers(0, seq_length - self._cfg.lead_len - self._num_masked_values)
                     masks[i, missing_indices, :] = 0.0
@@ -135,8 +145,9 @@ class DataProcessor:
 
         return groups
 
-    def _get_trajectories_from_group(self, group: AISDatasetRaw, traj_len: int) -> list[np.ndarray]:
+    def _get_trajectories_from_group(self, group: AISDatasetRaw, traj_len: int) -> np.ndarray:
         data = group.dataset
+        num_attributes = data.shape[1]
         candidate_trajectories = []
 
         # data_sorted = data[np.argsort(data[:, 0])]
@@ -164,10 +175,10 @@ class DataProcessor:
                 start_idx = n * traj_len
                 same_length_trajectories.append(traj[start_idx:start_idx + traj_len])
 
-        valid_trajectories = []
+        valid_trajectories = np.ndarray((0, traj_len, num_attributes), dtype=np.float32)
         for traj in same_length_trajectories:
             if self.is_valid_trajectory(traj):
-                valid_trajectories.append(traj)
+                valid_trajectories = np.vstack((valid_trajectories, np.array([traj], dtype=np.float32)))
 
         return valid_trajectories
 
