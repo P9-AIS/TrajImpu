@@ -1,11 +1,14 @@
 import torch
 import torch.nn as nn
 from dataclasses import field, dataclass
+from ForceProviders.force_provider_traffic import TrafficForceProvider
+from ForceProviders.i_force_provider import IForceProvider
 from Model.ais_encoder import HeterogeneousAttributeEncoder
 from Model.afa_module import AFAModule
 from Model.brits import BRITS
 from Model.ais_decoder import AISDecoder
 from ModelTypes.ais_dataset_masked import AISBatch
+from ModelTypes.ais_stats import AISStats
 
 
 @dataclass
@@ -14,12 +17,7 @@ class Config:
 
     # encoder
     dim_ais_attr_encoding: int = 16
-    status: str = "test"
-    num_ais_attributes: int = 14
-    num_navi_status_class: int = 0
-    num_destination_class: int = 0
-    num_cargo_type_class: int = 0
-    num_vessel_type_class: int = 0
+
     max_delta: float = 0.0
 
     # afa module
@@ -27,7 +25,6 @@ class Config:
     num_head: int = 4
 
     # brits
-    seq_len: int = 64
     dim_rnn_hidden: int = 10
     MIT: bool = True
 
@@ -36,47 +33,41 @@ class Config:
 
 
 class Model(nn.Module):
-    def __init__(self, cfg: Config):
+    def __init__(self, dataset_stats: AISStats, force_providers: list[IForceProvider], cfg: Config):
         super().__init__()
         self.ais_encoder = HeterogeneousAttributeEncoder(
             cfg.dim_ais_attr_encoding,
-            cfg.status,
-            cfg.num_navi_status_class,
-            cfg.num_destination_class,
-            cfg.num_cargo_type_class,
-            cfg.num_vessel_type_class,
+            dataset_stats,
             cfg.max_delta,
         )
+        self._cfg = cfg
+        self.ais_encoding_dim = self.ais_encoder.output_dim
 
-        self.ais_encoding_dim = cfg.dim_ais_attr_encoding * cfg.num_ais_attributes
-
-        self.afa_module = AFAModule(self.ais_encoding_dim, cfg.num_head, cfg.num_layers)
-        self.impu_module = BRITS(cfg.seq_len, self.ais_encoding_dim + 3,
-                                 cfg.dim_rnn_hidden, MIT=cfg.MIT, device=cfg.device)
-        self.ais_decoder = AISDecoder(self.ais_encoding_dim + 3, cfg.num_ais_attributes)
+        self.afa_module = AFAModule(self.ais_encoding_dim, cfg.num_head, *force_providers)
+        self.impu_module = BRITS(200, self.ais_encoding_dim, 13, MIT=cfg.MIT, device=cfg.device)
+        self.ais_decoder = AISDecoder(self.ais_encoding_dim, dataset_stats.num_attributes)
 
     def forward(self, ais_batch: AISBatch):
-        encoded = self.ais_encoder(ais_batch)
-        forces, _ = self.afa_module(encoded)
-        features = torch.cat((encoded, forces), dim=2)
+        encoded = self.ais_encoder(ais_batch.observed_data)
+        features, _ = self.afa_module(ais_batch.observed_data, encoded)
 
         current_ais_data = ais_batch.observed_data.clone()
-        current_masks = ais_batch.masks.clone()
+        current_masks = torch.repeat_interleave(ais_batch.masks, self._cfg.dim_ais_attr_encoding, dim=2)
 
         for _ in range(ais_batch.num_missing_values):
-            brits_data = prepare_brits_data(current_ais_data, features, current_masks)
+            brits_data = _prepare_brits_data(current_ais_data, features, current_masks)
 
-            imputed = self.impu_module(brits_data, stage="test")["imputed_data"]
+            imputed = self.impu_module(brits_data, stage="test")["imputed_data"]  # shape [b, s, feature_dim]
 
-            first_mask_idx = (current_masks == 0).any(dim=2).float().argmax(dim=1)
-            first_imputed = imputed[torch.arange(imputed.size(0)), first_mask_idx, :]
-            first_decoded = self.ais_decoder(first_imputed)
-            first_encoded = self.ais_encoder(first_decoded)
-            first_forces, _ = self.afa_module(first_encoded)
-            first_features = torch.cat((first_encoded, first_forces), dim=2)
+            first_mask_idx = (current_masks == 0).any(dim=2).float().argmax(dim=1)  # shape [b]
+            first_imputed = imputed[torch.arange(imputed.size(0)), first_mask_idx, :]  # shape [b, feature_dim]
+            first_imputed = first_imputed.unsqueeze(1)  # [b, 1, feature_dim]
+            first_decoded = self.ais_decoder(first_imputed)  # shape [b, 1, num_ais_attributes]
+            first_encoded = self.ais_encoder(first_decoded)  # shape [b, 1, feature_dim]
+            first_features, _ = self.afa_module(first_decoded, first_encoded)  # shape [b, 1, feature_dim]
 
-            features[torch.arange(ais_batch.num_values_in_sequence), first_mask_idx, :] = first_features
-            current_masks[torch.arange(ais_batch.num_values_in_sequence), first_mask_idx, :] = 1
+            features[torch.arange(features.size(0)), first_mask_idx, :] = first_features.squeeze(1)
+            current_masks[torch.arange(current_masks.size(0)), first_mask_idx, :] = 1
 
         final = self.ais_decoder(features)
         loss_total, loss_list = compute_loss(final, ais_batch, ais_batch.masks)
@@ -84,19 +75,28 @@ class Model(nn.Module):
         return loss_total, loss_list
 
 
-def prepare_brits_data(ais_data, encoded_data, masks):
+def _prepare_brits_data(ais_data, encoded_data, masks):
     b, s, f = encoded_data.size()
     delta_data = torch.zeros((b, s, f), device=encoded_data.device)
 
-    for i in range(1, s):
-        time_gap = ais_data[:, i, 0] - ais_data[:, i - 1, 0]
-        time_gap = time_gap.unsqueeze(-1)
-        delta_data[:, i, :] = (delta_data[:, i - 1, :] + time_gap) * (1 - masks[:, i - 1, :])
+    for t in range(1, s):
+        time_gap = (ais_data[:, t, 0] - ais_data[:, t - 1, 0]).unsqueeze(-1)  # [b, 1]
+        previous_mask = masks[:, t - 1, :]  # [b, f]
+        reset_deltas = time_gap * previous_mask  # [b, f]
+        accumulated_deltas = (time_gap + delta_data[:, t - 1, :]) * (1 - previous_mask)  # [b, f]
+        delta_data[:, t, :] = reset_deltas + accumulated_deltas
 
     data = {
-        "X": encoded_data,
-        "missing_mask": masks,
-        "deltas": delta_data,
+        "forward": {
+            "X": encoded_data,
+            "missing_mask": masks,
+            "deltas": delta_data,
+        },
+        "backward": {
+            "X": torch.flip(encoded_data, [1]),
+            "missing_mask": torch.flip(masks, [1]),
+            "deltas": torch.flip(delta_data, [1]),
+        },
     }
     return data
 

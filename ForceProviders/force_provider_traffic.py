@@ -1,4 +1,6 @@
 import math
+
+import torch
 from ForceTypes.area import Area
 from ForceProviders.i_force_provider import IForceProvider
 from ForceTypes.tilemap import Tilemap
@@ -131,3 +133,19 @@ class TrafficForceProvider(IForceProvider):
         y_force = self._vectormap[1][y, x]
 
         return Vec3(x_force, y_force, 0.0)
+
+    def get_forces(self, vals: torch.Tensor) -> torch.Tensor:
+        # vals: [b, s, num_ais_attr]
+        b, s, _ = vals.shape
+        forces = []
+
+        for i in range(b):
+            batch_forces = []
+            for j in range(s):
+                lon = vals[i, j, 3].item()
+                lat = vals[i, j, 2].item()
+                force_vec = self.get_force(Params(lon=lon, lat=lat))
+                batch_forces.append([force_vec.x, force_vec.y, force_vec.z])
+            forces.append(batch_forces)
+
+        return torch.tensor(forces, dtype=torch.float32)  # shape [b, s, 3]

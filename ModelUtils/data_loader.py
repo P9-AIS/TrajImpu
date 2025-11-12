@@ -1,5 +1,6 @@
 from torch.utils.data import DataLoader
 from ModelTypes.ais_dataset_masked import AISDatasetMasked
+from ModelTypes.ais_stats import AISStats
 from ModelUtils.data_processor import DataProcessor
 from dataclasses import dataclass
 import datetime as dt
@@ -25,25 +26,25 @@ class AisDataLoader:
         self._cfg = config
         self._data_processor = data_processor
 
-    def get_data_loaders(self) -> tuple[DataLoader, DataLoader]:
+    def get_data_loaders(self) -> tuple[DataLoader, DataLoader, AISStats]:
         dates = [self._cfg.start_date + dt.timedelta(days=i)
                  for i in range(0, (self._cfg.end_date - self._cfg.start_date).days + 1, self._cfg.date_step)]
 
         dataset = self._data_processor.get_masked_data(dates)
 
-        train_data, test_data = AisDataLoader.split_dataset(
+        train_data, test_data = AisDataLoader._split_dataset(
             self._cfg.train_split, dataset)
 
         train_loader = DataLoader(train_data, batch_size=self._cfg.batch_size,
                                   shuffle=self._cfg.shuffle,
-                                  num_workers=self._cfg.num_workers)
+                                  num_workers=self._cfg.num_workers, collate_fn=AISDatasetMasked.collate_ais_batch)
         test_loader = DataLoader(test_data, batch_size=self._cfg.batch_size,
                                  shuffle=self._cfg.shuffle,
-                                 num_workers=self._cfg.num_workers)
-        return train_loader, test_loader
+                                 num_workers=self._cfg.num_workers, collate_fn=AISDatasetMasked.collate_ais_batch)
+        return train_loader, test_loader, dataset.stats
 
     @staticmethod
-    def split_dataset(train_split: float, dataset: AISDatasetMasked) -> tuple[AISDatasetMasked, AISDatasetMasked]:
+    def _split_dataset(train_split: float, dataset: AISDatasetMasked) -> tuple[AISDatasetMasked, AISDatasetMasked]:
         indices = np.arange(len(dataset))
         np.random.default_rng(seed=42).shuffle(indices)
         train_size = int(len(indices) * train_split)
@@ -57,6 +58,8 @@ class AisDataLoader:
                 dataset.labels[idxs],
                 dataset.masks[idxs],
                 dataset.num_masked_values,
-                dataset.num_values_in_sequence,)
+                dataset.num_values_in_sequence,
+                dataset.stats,
+            )
 
         return extract_subset(train_indices), extract_subset(test_indices)

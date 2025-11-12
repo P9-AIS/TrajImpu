@@ -1,13 +1,16 @@
 import torch
 import torch.nn as nn
 
+from ForceProviders.i_force_provider import IForceProvider
+from ModelTypes.ais_dataset_masked import AISBatch
+
 
 class AFAModule(nn.Module):
-    def __init__(self, feature_dim, num_heads, force_provider):
+    def __init__(self, feature_dim: int, num_heads: int,  *force_providers: IForceProvider):
         super().__init__()
-        self.feature_dim = feature_dim
-        self.num_heads = num_heads
-        self.force_provider = force_provider
+        self._feature_dim = feature_dim
+        self._num_heads = num_heads
+        self._force_providers = force_providers
 
         # Multihead cross-attention: AIS queries attend to forces
         self.cross_attn = nn.MultiheadAttention(
@@ -18,42 +21,35 @@ class AFAModule(nn.Module):
 
         # Linear projection for forces to feature space (for K/V)
         self.force_proj = nn.Linear(3, feature_dim)
-        # Project attention output back to force space (x,y,z)
-        self.output_proj = nn.Linear(feature_dim, 3)
 
-    def forward(self, ais_data, encoded_data):
-        """
-        Args:
-            ais_data: [b, s, num_attr]
-            encoded_data: [b, s, num_attr, feature_dim]
-        Returns:
-            aggregated_forces: [b, s, 3]
-            attn_scores: [b, s, num_attr, num_forces]
-        """
-        b, s, num_attr, feature_dim = encoded_data.shape
+    def forward(self, ais_data: torch.Tensor, encoded_data: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        b, s, feature_dim = encoded_data.shape
 
-        # Candidate forces from provider
-        F_set = self.force_provider(ais_data)  # [b, s, num_forces, 3]
+        F_set = self._get_forces(ais_data)  # [b, s, num_forces, 3]
         num_forces = F_set.shape[2]
 
         # Flatten batch/time dims for attention
-        Q = encoded_data.view(b * s, num_attr, feature_dim)  # [b*s, num_attr, d]
-        K = self.force_proj(F_set.view(b * s, num_forces, 3))  # [b*s, num_forces, d]
-        V = K  # same as K (forces as both key and value)
+        Q = encoded_data.view(b * s, 1, feature_dim)  # [b*s, 1, feature_dim]
+        K = self.force_proj(F_set.view(b * s, num_forces, 3))  # [b*s, num_forces, feature_dim]
+        V = K
 
         # Cross-attention: AIS queries attend to forces
         attn_output, attn_weights = self.cross_attn(Q, K, V)
-        # attn_output: [b*s, num_attr, d]
-        # attn_weights: [b*s, num_attr, num_forces]
+        # attn_output: [b*s, 1, feature_dim], attn_weights: [b*s, 1, num_forces]
 
-        # Get attention scores per force
-        attn_scores = attn_weights.view(b, s, num_attr, num_forces)
+        attn_output = attn_output.squeeze(1).view(b, s, feature_dim)  # [b, s, feature_dim]
+        attn_scores = attn_weights.squeeze(1).view(b, s, num_forces)  # [b, s, num_forces]
 
-        # Aggregate across AIS attributes to get a single weighted force vector per timestep
-        attn_mean = attn_scores.mean(dim=2)  # [b, s, num_forces]
-        attn_norm = torch.softmax(attn_mean, dim=-1)  # normalize attention over forces
+        return attn_output, attn_scores
 
-        # Weighted sum of original forces
-        aggregated_forces = torch.sum(F_set * attn_norm.unsqueeze(-1), dim=2)  # [b, s, 3]
+    def _get_forces(self, vals: torch.Tensor) -> torch.Tensor:
+        b, s, _ = vals.shape
+        num_forces = len(self._force_providers)
 
-        return aggregated_forces, attn_scores
+        all_forces = torch.empty(b, s, num_forces, 3)
+
+        for i, provider in enumerate(self._force_providers):
+            forces = provider.get_forces(vals)
+            all_forces[:, :, i, :] = forces
+
+        return all_forces

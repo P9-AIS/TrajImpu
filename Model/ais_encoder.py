@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 import math
 
+from ModelTypes.ais_col_dict import AISColDict
+from ModelTypes.ais_dataset_masked import AISBatch
+from ModelTypes.ais_stats import AISStats
+
 
 def get_time_interval(t, max_delta):
     """
@@ -172,32 +176,6 @@ class CyclicalEncoder(nn.Module):
         return output
 
 
-class ContinuousEncoder(nn.Module):
-    def __init__(self, d_model_E, mu, sigma):
-        super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(1, d_model_E),
-        )
-        self.alpha = nn.Parameter(torch.ones(1), requires_grad=True)
-        self.beta = nn.Parameter(torch.zeros(1), requires_grad=True)
-
-    def forward(self, x, mu, sigma):
-        missing_mask = torch.eq(x, -1)  # [b, s, 1]
-
-        denominator = torch.clamp(sigma, min=1e-6)
-        x_norm = (x - mu) / denominator
-
-        x_projected = x_norm * self.alpha + self.beta
-        batch_size, seq_len, _ = x_projected.shape
-
-        x_encoded = self.mlp(x_projected.view(-1, 1))  # [b*s, d_model_E]
-        x_encoded = x_encoded.view(batch_size, seq_len, 1, -1)  # [b, s, 1, d_model_E]
-
-        x_encoded = x_encoded.masked_fill(missing_mask.unsqueeze(-1), 0.0)
-
-        return x_encoded, self.alpha, self.beta
-
-
 class ContinuousEncoderTwo(nn.Module):
     def __init__(self, d_model_E):
         super().__init__()
@@ -241,149 +219,83 @@ class DiscreteEncoder(nn.Module):
 class HeterogeneousAttributeEncoder(nn.Module):
 
     def __init__(self, feature_dim,
-                 status,
-                 navi_status_class_num,
-                 destination_class_num,
-                 cargo_type_class_num,
-                 vessel_type_class_num,
+                 stats: AISStats,
                  max_delta,
-                 continuous_two=False,
                  frequencies=None):
         super().__init__()
-        self.data_status = status
+        self.stats = stats
         self.max_delta = max_delta
+
         self.coordinate_encoder = CoordinateEncoder(feature_dim)
         self.time_encoder = TimeEncoder(feature_dim, max_delta, frequencies)
-        self.continuous_two = continuous_two
-
         self.cog_cyclical_encoder = CyclicalEncoder(feature_dim)
         self.heading_angle_cyclical_encoder = CyclicalEncoder(feature_dim)
+        self.vessel_draught_continuous_encoder = ContinuousEncoderTwo(feature_dim)
+        self.sog_continuous_encoder = ContinuousEncoderTwo(feature_dim)
+        self.rot_continuous_encoder = ContinuousEncoderTwo(feature_dim)
+        self.vessel_type_discrete_encoder = DiscreteEncoder(
+            feature_dim, num_classes=max(int(t) for t in stats.vessel_types))
 
-        self.vessel_width_continuous_encoder = ContinuousEncoder(
-            feature_dim, self.data_status['vessel_width_mean'], self.data_status['vessel_width_std'])
-        self.vessel_length_continuous_encoder = ContinuousEncoder(
-            feature_dim, self.data_status['vessel_length_mean'], self.data_status['vessel_length_std'])
-        self.vessel_draught_continuous_encoder = ContinuousEncoder(
-            feature_dim, self.data_status['vessel_draught_mean'], self.data_status['vessel_draught_std'])
-        self.sog_continuous_encoder = ContinuousEncoder(
-            feature_dim, self.data_status['sog_mean'], self.data_status['sog_std'])
-        self.rot_continuous_encoder = ContinuousEncoder(
-            feature_dim, self.data_status['rot_mean'], self.data_status['rot_std'])
-        if continuous_two:
-            self.vessel_width_continuous_encoder = ContinuousEncoderTwo(feature_dim)
-            self.vessel_length_continuous_encoder = ContinuousEncoderTwo(feature_dim)
-            self.vessel_draught_continuous_encoder = ContinuousEncoderTwo(feature_dim)
-            self.sog_continuous_encoder = ContinuousEncoderTwo(feature_dim)
-            self.rot_continuous_encoder = ContinuousEncoderTwo(feature_dim)
+        self.output_dim = (9 * feature_dim)
 
-        self.vessel_type_discrete_encoder = DiscreteEncoder(feature_dim, num_classes=vessel_type_class_num)
-        self.destination_discrete_encoder = DiscreteEncoder(feature_dim, num_classes=destination_class_num)
-        self.cargo_type_discrete_encoder = DiscreteEncoder(feature_dim, num_classes=cargo_type_class_num)
-        self.navi_status_discrete_encoder = DiscreteEncoder(feature_dim, num_classes=navi_status_class_num)
+        self.timestamp_col_idx = AISColDict.TIMESTAMP.value
+        self.latitude_col_idx = AISColDict.LATITUDE.value
 
-    def forward(self, tensor_input):  # [b, s, n]
-        b, s, _ = tensor_input.shape
+    def forward(self, ais_data: torch.Tensor):
+        tensor_input = ais_data
+        b, s, _ = ais_data.shape  # [b, s, n]
+
+        draught_min = torch.tensor(self.stats.min_draught, device=tensor_input.device)
+        draught_max = torch.tensor(self.stats.max_draught, device=tensor_input.device)
+        sog_min = torch.tensor(self.stats.min_sog, device=tensor_input.device)
+        sog_max = torch.tensor(self.stats.max_sog, device=tensor_input.device)
+        rot_min = torch.tensor(self.stats.min_rot, device=tensor_input.device)
+        rot_max = torch.tensor(self.stats.max_rot, device=tensor_input.device)
+        draught_min_matrix = draught_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
+        draught_max_matrix = draught_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
+        sog_min_matrix = sog_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
+        sog_max_matrix = sog_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
+        rot_min_matrix = rot_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
+        rot_max_matrix = rot_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
+
         spatial_output = self.coordinate_encoder(
-            tensor_input[:, :, 12:13], tensor_input[:, :, 11:12])  # longitude, latitude
-        time_output = self.time_encoder(tensor_input[:, :, 13:14])  # timestamp
+            tensor_input[:, :, AISColDict.LONGITUDE.value:AISColDict.LONGITUDE.value+1],
+            tensor_input[:, :, AISColDict.LATITUDE.value:AISColDict.LATITUDE.value+1]
+        )
 
-        cog_output = self.cog_cyclical_encoder(tensor_input[:, :, 9:10])  # cog
-        heading_angle_output = self.heading_angle_cyclical_encoder(tensor_input[:, :, 10:11])  # heading_angle
+        time_output = self.time_encoder(
+            tensor_input[:, :, AISColDict.TIMESTAMP.value:AISColDict.TIMESTAMP.value+1])
 
-        vessel_type_output = self.vessel_type_discrete_encoder(tensor_input[:, :, 0:1])
-        destination_output = self.destination_discrete_encoder(tensor_input[:, :, 4:5])
-        cargo_type_output = self.cargo_type_discrete_encoder(tensor_input[:, :, 5:6])
-        navi_status_output = self.navi_status_discrete_encoder(tensor_input[:, :, 6:7])
+        cog_output = self.cog_cyclical_encoder(
+            tensor_input[:, :, AISColDict.COG.value:AISColDict.COG.value+1])
 
-        if not self.continuous_two:
-            width_mu = torch.tensor(self.data_status['vessel_width_mean'], device=tensor_input.device)
-            width_sigma = torch.tensor(self.data_status['vessel_width_std'], device=tensor_input.device)
-            length_mu = torch.tensor(self.data_status['vessel_length_mean'], device=tensor_input.device)
-            length_sigma = torch.tensor(self.data_status['vessel_length_std'], device=tensor_input.device)
-            draught_mu = torch.tensor(self.data_status['vessel_draught_mean'], device=tensor_input.device)
-            draught_sigma = torch.tensor(self.data_status['vessel_draught_std'], device=tensor_input.device)
-            sog_mu = torch.tensor(self.data_status['sog_mean'], device=tensor_input.device)
-            sog_sigma = torch.tensor(self.data_status['sog_std'], device=tensor_input.device)
-            rot_mu = torch.tensor(self.data_status['rot_mean'], device=tensor_input.device)
-            rot_sigma = torch.tensor(self.data_status['rot_std'], device=tensor_input.device)
+        heading_angle_output = self.heading_angle_cyclical_encoder(
+            tensor_input[:, :, AISColDict.HEADING.value:AISColDict.HEADING.value+1])
 
-            width_mu_matrix = width_mu.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            width_sigma_matrix = width_sigma.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            length_mu_matrix = length_mu.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            length_sigma_matrix = length_sigma.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            draught_mu_matrix = draught_mu.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            draught_sigma_matrix = draught_sigma.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            sog_mu_matrix = sog_mu.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            sog_sigma_matrix = sog_sigma.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            rot_mu_matrix = rot_mu.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            rot_sigma_matrix = rot_sigma.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
+        vessel_type_output = self.vessel_type_discrete_encoder(
+            tensor_input[:, :, AISColDict.VESSEL_TYPE.value:AISColDict.VESSEL_TYPE.value+1])
 
-            width_output, width_alpha, width_beta = self.vessel_width_continuous_encoder(tensor_input[:, :, 1:2],
-                                                                                         mu=width_mu_matrix,
-                                                                                         sigma=width_sigma_matrix)
-            length_output, length_alpha, length_beta = self.vessel_length_continuous_encoder(tensor_input[:, :, 2:3],
-                                                                                             mu=length_mu_matrix,
-                                                                                             sigma=length_sigma_matrix)
-            draught_output, draught_alpha, draught_beta = self.vessel_draught_continuous_encoder(tensor_input[:, :, 3:4],
-                                                                                                 mu=draught_mu_matrix,
-                                                                                                 sigma=draught_sigma_matrix)
-            sog_output, sog_alpha, sog_beta = self.sog_continuous_encoder(tensor_input[:, :, 7:8],
-                                                                          mu=sog_mu_matrix, sigma=sog_sigma_matrix)
-            rot_output, rot_alpha, rot_beta = self.rot_continuous_encoder(tensor_input[:, :, 8:9],
-                                                                          mu=rot_mu_matrix, sigma=rot_sigma_matrix)
-            continuous_ab_dict = {
-                'rot': (rot_alpha, rot_beta),
-                'sog': (sog_alpha, sog_beta),
-                'draught': (draught_alpha, draught_beta),
-                'length': (length_alpha, length_beta),
-                'width': (width_alpha, width_beta)
-            }
-        else:
-            width_min = torch.tensor(self.data_status['vessel_width_min'], device=tensor_input.device)
-            width_max = torch.tensor(self.data_status['vessel_width_max'], device=tensor_input.device)
-            length_min = torch.tensor(self.data_status['vessel_length_min'], device=tensor_input.device)
-            length_max = torch.tensor(self.data_status['vessel_length_max'], device=tensor_input.device)
-            draught_min = torch.tensor(self.data_status['vessel_draught_min'], device=tensor_input.device)
-            draught_max = torch.tensor(self.data_status['vessel_draught_max'], device=tensor_input.device)
-            sog_min = torch.tensor(self.data_status['sog_min'], device=tensor_input.device)
-            sog_max = torch.tensor(self.data_status['sog_max'], device=tensor_input.device)
-            rot_min = torch.tensor(self.data_status['rot_min'], device=tensor_input.device)
-            rot_max = torch.tensor(self.data_status['rot_max'], device=tensor_input.device)
+        draught_output = self.vessel_draught_continuous_encoder(
+            tensor_input[:, :, AISColDict.DRAUGHT.value:AISColDict.DRAUGHT.value+1],
+            min_val=draught_min_matrix,
+            max_val=draught_max_matrix)
 
-            width_min_matrix = width_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            width_max_matrix = width_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            length_min_matrix = length_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            length_max_matrix = length_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            draught_min_matrix = draught_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            draught_max_matrix = draught_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            sog_min_matrix = sog_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            sog_max_matrix = sog_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            rot_min_matrix = rot_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
-            rot_max_matrix = rot_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
+        sog_output = self.sog_continuous_encoder(
+            tensor_input[:, :, AISColDict.SOG.value:AISColDict.SOG.value+1],
+            min_val=sog_min_matrix,
+            max_val=sog_max_matrix)
 
-            width_output = self.vessel_width_continuous_encoder(tensor_input[:, :, 1:2],
-                                                                min_val=width_min_matrix,
-                                                                max_val=width_max_matrix)
-            length_output = self.vessel_length_continuous_encoder(tensor_input[:, :, 2:3],
-                                                                  min_val=length_min_matrix,
-                                                                  max_val=length_max_matrix)
-            draught_output = self.vessel_draught_continuous_encoder(tensor_input[:, :, 3:4],
-                                                                    min_val=draught_min_matrix,
-                                                                    max_val=draught_max_matrix)
-            sog_output = self.sog_continuous_encoder(tensor_input[:, :, 7:8],
-                                                     min_val=sog_min_matrix,
-                                                     max_val=sog_max_matrix)
-            rot_output = self.rot_continuous_encoder(tensor_input[:, :, 8:9],
-                                                     min_val=rot_min_matrix,
-                                                     max_val=rot_max_matrix)
-            continuous_ab_dict = {}
+        rot_output = self.rot_continuous_encoder(
+            tensor_input[:, :, AISColDict.ROT.value:AISColDict.ROT.value+1],
+            min_val=rot_min_matrix,
+            max_val=rot_max_matrix)
 
-        output = torch.cat((vessel_type_output, width_output, length_output, draught_output,
-                            destination_output, cargo_type_output, navi_status_output,
-                            sog_output, rot_output, cog_output, heading_angle_output,
-                            spatial_output, time_output),
-                           dim=2)  # shape [b, s, 14, d_model]
+        output = torch.cat((time_output, spatial_output,
+                            cog_output, heading_angle_output,
+                            draught_output, sog_output, rot_output,
+                            vessel_type_output),
+                           dim=2)  # shape [b, s, 8, feature_dim]
 
-        output = output.view(b, s, -1)  # shape [b, s, 14*d_model]
+        output = output.view(b, s, -1)  # shape [b, s, 8*feature_dim]
 
-        return output, continuous_ab_dict
+        return output

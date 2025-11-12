@@ -54,7 +54,6 @@ modelCfg:
 
     # encoder
     dim_ais_attr_encoding: 16
-    status: "test"
     num_ais_attributes: 14
     num_navi_status_class: 0
     num_destination_class: 0

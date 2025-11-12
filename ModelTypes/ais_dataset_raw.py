@@ -28,7 +28,7 @@ class AISDatasetRaw:
         with np.load(path, allow_pickle=True) as data:
             dataset: AISDatasetRaw = pickle.loads(data['raw_ais_dataset_object'].item())
             dataset.dataset = data['dataset']
-        print(f"Loaded raw ais dataset of size {dataset.dataset.size}\n")
+        print(f"Loaded raw ais dataset of {dataset.dataset.shape[0]:,} records \n")
         return dataset
 
     # method to combine two AisDatasetRaw objects

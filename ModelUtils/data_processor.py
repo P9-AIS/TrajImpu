@@ -8,7 +8,6 @@ import datetime as dt
 import numpy as np
 from enum import Enum
 from dataclasses import dataclass
-
 from ModelUtils.geo_utils import GeoUtils
 
 
@@ -46,7 +45,10 @@ class DataProcessor:
             raise ValueError("Masking percentage is too high for the given lead length and trajectory length.")
 
     def get_masked_data(self, dates: list[dt.date]) -> AISDatasetMasked:
+        print("Getting processed data...")
         processed_data = self._get_processed_data(dates)
+
+        print("Generating masks for processed data...")
         masks = self._get_masks(processed_data)
 
         masked_data = AISDatasetMasked.from_ais_dataset_processed(
@@ -75,10 +77,7 @@ class DataProcessor:
             processed_data_file_path = self._get_dataset_filename(date)
             processed_data_file_paths.append(processed_data_file_path)
 
-            if os.path.exists(processed_data_file_path):
-                print("Loading processed data from file...")
-                processed_data = AISDatasetProcessed.load(processed_data_file_path)
-            else:
+            if not os.path.exists(processed_data_file_path):
                 print("Processed data does not exist. Creating new processed data...")
                 coarse_dataset = self._data_handler.get_ais_messages(date)
                 processed_data = self._process_dataset(coarse_dataset)
@@ -95,13 +94,15 @@ class DataProcessor:
         return AISDatasetProcessed(data, data)
 
     def _get_data(self, dataset: AISDatasetRaw) -> np.ndarray:
-        num_attributes = dataset.dataset.shape[1]
         groups = DataProcessor._group_dataset(dataset)
 
-        trajectories = np.ndarray((0, self._cfg.traj_len, num_attributes), dtype=np.float32)
+        if len(groups) == 0:
+            raise ValueError("No groups found in dataset.")
 
-        for group in groups:
-            group_trajectories = self._get_trajectories_from_group(group, self._cfg.traj_len)
+        trajectories = self._get_trajectories_from_group(groups[0], self._cfg.traj_len)
+
+        for i in range(1, len(groups)):
+            group_trajectories = self._get_trajectories_from_group(groups[i], self._cfg.traj_len)
             if group_trajectories.size > 0:
                 trajectories = np.vstack((trajectories, np.array(group_trajectories, dtype=np.float32)))
 
@@ -115,7 +116,7 @@ class DataProcessor:
         seq_length = dataset.data.shape[1]
         num_attributes = dataset.data.shape[2]
 
-        masks = np.ones((num_trajs, seq_length, num_attributes), dtype=np.float32)
+        masks = np.ones((num_trajs, seq_length, num_attributes), dtype=np.int8)
 
         match self._cfg.masking_strategy:
             case MaskingStrategy.POINT_MISSING:
@@ -146,7 +147,7 @@ class DataProcessor:
         return groups
 
     def _get_trajectories_from_group(self, group: AISDatasetRaw, traj_len: int) -> np.ndarray:
-        data = group.dataset
+        data = group.dataset[:, 1:]  # drop mmsi col
         num_attributes = data.shape[1]
         candidate_trajectories = []
 
@@ -177,7 +178,7 @@ class DataProcessor:
 
         valid_trajectories = np.ndarray((0, traj_len, num_attributes), dtype=np.float32)
         for traj in same_length_trajectories:
-            if self.is_valid_trajectory(traj):
+            if self._is_valid_trajectory(traj):
                 valid_trajectories = np.vstack((valid_trajectories, np.array([traj], dtype=np.float32)))
 
         return valid_trajectories
@@ -199,5 +200,5 @@ class DataProcessor:
 
         return False
 
-    def is_valid_trajectory(self, trajectory: np.ndarray) -> bool:
+    def _is_valid_trajectory(self, trajectory: np.ndarray) -> bool:
         return True

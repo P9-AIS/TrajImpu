@@ -216,7 +216,7 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
 
         # --- Cleaning phase ---
         print("Filtering unwanted rows...")
-        invalid_values = ["Unknown", "Undefined", "None", ""]
+        invalid_values = ["Unknown", "Undefined", "None", "", "nan", "NaN", "N/A", "NULL"]
         df = df[~df.isin(invalid_values).any(axis=1)]
 
         # --- Parsing phase ---
@@ -226,16 +226,17 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
 
         print("Converting timestamps to UNIX time...")
         ts_col = "# Timestamp"
-        df[ts_col] = (
-            pd.to_datetime(df[ts_col], format="%d/%m/%Y %H:%M:%S", errors="coerce")
-            .dropna()
-            .map(lambda x: x.timestamp())
-        )
+        df[ts_col] = pd.to_datetime(df[ts_col], format="%d/%m/%Y %H:%M:%S", errors="coerce")
+        df = df.dropna(subset=[ts_col])
+        df[ts_col] = df[ts_col].map(lambda x: x.timestamp())
 
         print("Converting data to floats...")
         for col in df.columns:
             if col != ts_col:
-                df[col] = df[col].astype(float)
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        print("Dropping rows with NaN values...")
+        df = df.dropna()
 
         print("Filtering out-of-bounds latitude and longitude...")
         df = df[((df['Latitude'] >= -90) & (df['Latitude'] <= 90)) &
@@ -244,6 +245,12 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
         print("Converting DataFrame to numpy array...")
         data_array = df.to_numpy(dtype=float)
         dataset = AISDatasetRaw(data_array)
+
+        print("NaN count per column:\n", df.isna().sum())
+        print("Any inf values:", np.isinf(df.to_numpy()).any())
+
+        assert not np.isnan(data_array).any(), "Data contains NaN values after processing."
+        assert not np.isinf(data_array).any(), "Data contains infinite values after processing."
 
         print("Saving filtered data to npy file...")
         os.makedirs(os.path.dirname(np_file_path), exist_ok=True)
