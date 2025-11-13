@@ -114,7 +114,7 @@ class DataProcessor:
     def _get_masks(self, dataset: AISDatasetProcessed) -> np.ndarray:
         num_trajs = dataset.data.shape[0]
         seq_length = dataset.data.shape[1]
-        num_attributes = dataset.data.shape[2]
+        num_attributes = dataset.data.shape[2] - 1  # exclude timestamp
 
         masks = np.ones((num_trajs, seq_length, num_attributes), dtype=np.int8)
 

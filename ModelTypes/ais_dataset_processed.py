@@ -43,7 +43,6 @@ class AISDatasetProcessed():
 
         return AISStats(
             seq_len=seq_len,
-            num_attributes=self.data.shape[2],
             num_trajs=num_trajs,
             num_records=num_records,
             vessel_types=vessel_types_set,

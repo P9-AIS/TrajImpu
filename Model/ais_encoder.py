@@ -7,21 +7,6 @@ from ModelTypes.ais_dataset_masked import AISBatch
 from ModelTypes.ais_stats import AISStats
 
 
-def get_time_interval(t, max_delta):
-    """
-    Calculate the time interval between consecutive timestamps.
-
-    Args:
-        t (torch.Tensor): A tensor of shape [b, s, 1] representing timestamps in seconds.
-
-    """
-    t = t.squeeze(-1)
-    diffs = t[:, 1:] - t[:, :-1]
-    diffs = torch.cat([torch.zeros_like(t[:, :1]), diffs], dim=1).unsqueeze(-1)
-    diffs = torch.clamp(diffs, min=0, max=max_delta)
-    return diffs
-
-
 class CoordinateEncoder(nn.Module):
     """
     Spatial Coordinate Encoder using hybrid spherical-harmonic encoding.
@@ -84,50 +69,6 @@ class CoordinateEncoder(nn.Module):
         output = torch.stack([encoded_lat, encoded_lon], dim=2)  # Shape [b, s, 2, d_model_E]
 
         return output
-
-
-class TimeEncoder(nn.Module):
-    """Temporal Feature Encoder (Multi-Frequency Sine Encoding)"""
-
-    def __init__(self, d_model_E, max_delta, frequencies=None):
-        super().__init__()
-        self.max_delta = max_delta
-        if frequencies is None:
-            # frequencies = [60, 3600, 24*3600, 168*3600, 720*3600, 8760*3600]
-            frequencies = [60, 3600, 24*3600]
-        self.frequencies = frequencies
-
-        self.interval_encoder = nn.Sequential(
-            nn.Linear(1, d_model_E),
-            nn.ReLU()
-        )
-
-        self.mlp = nn.Sequential(
-            nn.Linear(3 * len(frequencies) + d_model_E, d_model_E),
-            nn.Tanh(),
-        )
-
-    def forward(self, t):
-        t_interval = get_time_interval(t, self.max_delta)  # [b, s, 1]
-        missing_mask = torch.isclose(t, torch.tensor(-1.0, dtype=torch.float32), atol=1e-5)
-        t_interval = t_interval.masked_fill(missing_mask, 0.0)
-
-        time_features = []
-        for freq in self.frequencies:
-            sin = torch.sin(2 * math.pi * t / freq - math.pi)
-            cos = torch.cos(2 * math.pi * t / freq - math.pi)
-            time_features.extend([sin, cos, torch.log(t_interval + 1e-6)])
-
-        interval_encoded = self.interval_encoder(torch.log(t_interval + 1e-6))  # [b, s, d_model_E//2]
-
-        encoded_features = torch.cat([
-            torch.cat(time_features, dim=-1),
-            interval_encoded
-        ], dim=-1)
-
-        x = self.mlp(encoded_features).unsqueeze(2)
-        x = x.masked_fill(missing_mask.unsqueeze(-1), 0.0)
-        return x
 
 
 class CyclicalEncoder(nn.Module):
@@ -220,14 +161,12 @@ class HeterogeneousAttributeEncoder(nn.Module):
 
     def __init__(self, feature_dim,
                  stats: AISStats,
-                 max_delta,
-                 frequencies=None):
+                 max_delta: float):
         super().__init__()
         self.stats = stats
         self.max_delta = max_delta
 
         self.coordinate_encoder = CoordinateEncoder(feature_dim)
-        self.time_encoder = TimeEncoder(feature_dim, max_delta, frequencies)
         self.cog_cyclical_encoder = CyclicalEncoder(feature_dim)
         self.heading_angle_cyclical_encoder = CyclicalEncoder(feature_dim)
         self.vessel_draught_continuous_encoder = ContinuousEncoderTwo(feature_dim)
@@ -236,7 +175,7 @@ class HeterogeneousAttributeEncoder(nn.Module):
         self.vessel_type_discrete_encoder = DiscreteEncoder(
             feature_dim, num_classes=max(int(t) for t in stats.vessel_types))
 
-        self.output_dim = (9 * feature_dim)
+        self.output_dim = (8 * feature_dim)
 
         self.timestamp_col_idx = AISColDict.TIMESTAMP.value
         self.latitude_col_idx = AISColDict.LATITUDE.value
@@ -263,9 +202,6 @@ class HeterogeneousAttributeEncoder(nn.Module):
             tensor_input[:, :, AISColDict.LATITUDE.value:AISColDict.LATITUDE.value+1]
         )
 
-        time_output = self.time_encoder(
-            tensor_input[:, :, AISColDict.TIMESTAMP.value:AISColDict.TIMESTAMP.value+1])
-
         cog_output = self.cog_cyclical_encoder(
             tensor_input[:, :, AISColDict.COG.value:AISColDict.COG.value+1])
 
@@ -290,7 +226,7 @@ class HeterogeneousAttributeEncoder(nn.Module):
             min_val=rot_min_matrix,
             max_val=rot_max_matrix)
 
-        output = torch.cat((time_output, spatial_output,
+        output = torch.cat((spatial_output,
                             cog_output, heading_angle_output,
                             draught_output, sog_output, rot_output,
                             vessel_type_output),

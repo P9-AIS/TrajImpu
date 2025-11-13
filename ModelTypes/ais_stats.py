@@ -4,7 +4,6 @@ from dataclasses import dataclass
 @dataclass
 class AISStats:
     seq_len: int
-    num_attributes: int
     num_trajs: int
     num_records: int
     vessel_types: set[int]
@@ -28,7 +27,6 @@ class AISStats:
 
         return AISStats(
             seq_len=self.seq_len,
-            num_attributes=self.num_attributes,
             num_trajs=combined_num_trajs,
             num_records=combined_num_records,
             vessel_types=combined_vessel_types,

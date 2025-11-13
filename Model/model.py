@@ -6,7 +6,7 @@ from ForceProviders.i_force_provider import IForceProvider
 from Model.ais_encoder import HeterogeneousAttributeEncoder
 from Model.afa_module import AFAModule
 from Model.brits import BRITS
-from Model.ais_decoder import AISDecoder
+from Model.ais_decoder import HeterogeneousAttributeDecoder
 from ModelTypes.ais_dataset_masked import AISBatch
 from ModelTypes.ais_stats import AISStats
 
@@ -44,7 +44,8 @@ class Model(nn.Module):
         self.afa_module = AFAModule(self.ais_encoding_dim, cfg.num_head, *force_providers).to(cfg.device)
         self.impu_module = BRITS(dataset_stats.seq_len, self.ais_encoding_dim,
                                  cfg.dim_rnn_hidden, MIT=cfg.MIT, device=cfg.device).to(cfg.device)
-        self.ais_decoder = AISDecoder(self.ais_encoding_dim, dataset_stats.num_attributes).to(cfg.device)
+        self.ais_decoder = HeterogeneousAttributeDecoder(
+            self.ais_encoding_dim, dataset_stats, self.ais_encoding_dim).to(cfg.device)
 
     def forward(self, ais_batch: AISBatch):
         ais_batch.observed_data = ais_batch.observed_data.contiguous().to(self._cfg.device)
@@ -59,7 +60,7 @@ class Model(nn.Module):
         all_imputed = []
         all_imputed_truth = []
 
-        for step in range(ais_batch.num_missing_values):
+        for _ in range(ais_batch.num_missing_values):
             brits_data = _prepare_brits_data(ais_batch.observed_data, features, current_masks)
 
             imputed = self.impu_module(brits_data, stage="test")["imputed_data"]  # [b, s, feat_dim]
