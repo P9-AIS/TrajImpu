@@ -22,5 +22,7 @@ if __name__ == "__main__":
     train_data_loader, test_data_loader, stats = data_loader.get_data_loaders()
     model = Model(stats, [force_provider_depth], cfg.modelCfg)
 
+    model = model.to(cfg.modelCfg.device)
+
     trainer = Trainer(model, train_data_loader, test_data_loader, cfg.modelTrainerCfg)
     trainer.train()

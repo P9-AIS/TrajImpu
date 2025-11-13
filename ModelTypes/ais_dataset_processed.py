@@ -24,6 +24,7 @@ class AISDatasetProcessed():
         self.stats = self.stats.combine(other.stats)
 
     def _get_stats(self) -> AISStats:
+        seq_len = self.data.shape[1]
         num_trajs = self.data.shape[0]
         num_records = self.data.shape[0] * self.data.shape[1]
 
@@ -41,6 +42,7 @@ class AISDatasetProcessed():
         max_rot = np.max(rot_column)
 
         return AISStats(
+            seq_len=seq_len,
             num_attributes=self.data.shape[2],
             num_trajs=num_trajs,
             num_records=num_records,

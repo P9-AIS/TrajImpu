@@ -36,43 +36,66 @@ class Model(nn.Module):
     def __init__(self, dataset_stats: AISStats, force_providers: list[IForceProvider], cfg: Config):
         super().__init__()
         self.ais_encoder = HeterogeneousAttributeEncoder(
-            cfg.dim_ais_attr_encoding,
-            dataset_stats,
-            cfg.max_delta,
-        )
+            cfg.dim_ais_attr_encoding, dataset_stats, cfg.max_delta).to(cfg.device)
+
         self._cfg = cfg
         self.ais_encoding_dim = self.ais_encoder.output_dim
 
-        self.afa_module = AFAModule(self.ais_encoding_dim, cfg.num_head, *force_providers)
-        self.impu_module = BRITS(200, self.ais_encoding_dim, 13, MIT=cfg.MIT, device=cfg.device)
-        self.ais_decoder = AISDecoder(self.ais_encoding_dim, dataset_stats.num_attributes)
+        self.afa_module = AFAModule(self.ais_encoding_dim, cfg.num_head, *force_providers).to(cfg.device)
+        self.impu_module = BRITS(dataset_stats.seq_len, self.ais_encoding_dim,
+                                 cfg.dim_rnn_hidden, MIT=cfg.MIT, device=cfg.device).to(cfg.device)
+        self.ais_decoder = AISDecoder(self.ais_encoding_dim, dataset_stats.num_attributes).to(cfg.device)
 
     def forward(self, ais_batch: AISBatch):
+        ais_batch.observed_data = ais_batch.observed_data.contiguous().to(self._cfg.device)
+        ais_batch.masks = ais_batch.masks.to(self._cfg.device)
+
         encoded = self.ais_encoder(ais_batch.observed_data)
         features, _ = self.afa_module(ais_batch.observed_data, encoded)
 
-        current_ais_data = ais_batch.observed_data.clone()
-        current_masks = torch.repeat_interleave(ais_batch.masks, self._cfg.dim_ais_attr_encoding, dim=2)
+        fine_masks = torch.repeat_interleave(ais_batch.masks, self._cfg.dim_ais_attr_encoding, dim=2)
+        current_masks = fine_masks.clone()
 
-        for _ in range(ais_batch.num_missing_values):
-            brits_data = _prepare_brits_data(current_ais_data, features, current_masks)
+        all_imputed = []
+        all_imputed_truth = []
 
-            imputed = self.impu_module(brits_data, stage="test")["imputed_data"]  # shape [b, s, feature_dim]
+        for step in range(ais_batch.num_missing_values):
+            brits_data = _prepare_brits_data(ais_batch.observed_data, features, current_masks)
 
-            first_mask_idx = (current_masks == 0).any(dim=2).float().argmax(dim=1)  # shape [b]
-            first_imputed = imputed[torch.arange(imputed.size(0)), first_mask_idx, :]  # shape [b, feature_dim]
-            first_imputed = first_imputed.unsqueeze(1)  # [b, 1, feature_dim]
-            first_decoded = self.ais_decoder(first_imputed)  # shape [b, 1, num_ais_attributes]
-            first_encoded = self.ais_encoder(first_decoded)  # shape [b, 1, feature_dim]
-            first_features, _ = self.afa_module(first_decoded, first_encoded)  # shape [b, 1, feature_dim]
+            imputed = self.impu_module(brits_data, stage="test")["imputed_data"]  # [b, s, feat_dim]
 
-            features[torch.arange(features.size(0)), first_mask_idx, :] = first_features.squeeze(1)
-            current_masks[torch.arange(current_masks.size(0)), first_mask_idx, :] = 1
+            # Select index of first missing value per batch
+            first_mask_idx = (current_masks == 0).any(dim=2).float().argmax(dim=1)  # [b]
 
-        final = self.ais_decoder(features)
-        loss_total, loss_list = compute_loss(final, ais_batch, ais_batch.masks)
+            # Gather imputed feature for that position
+            batch_idx = torch.arange(imputed.size(0), device=imputed.device)
+            first_imputed = imputed[batch_idx, first_mask_idx, :]                  # [b, feat_dim]
+            first_imputed_truth = ais_batch.observed_data[batch_idx, first_mask_idx, :]
 
-        return loss_total, loss_list
+            # Decode -> enrich -> re-encode
+            first_decoded = self.ais_decoder(first_imputed.unsqueeze(1))           # [b, 1, num_ais_attr]
+            first_encoded = self.ais_encoder(first_decoded)                        # [b, 1, feat_dim]
+            first_features, _ = self.afa_module(first_decoded, first_encoded)      # [b, 1, feat_dim]
+
+            # Replace feature at that timestep in a differentiable way
+            scatter_index = first_mask_idx.view(-1, 1, 1).expand(-1, 1, features.size(2))
+            features = features.clone()
+            features.scatter_(1, scatter_index, first_features)
+
+            # Mark mask as filled
+            current_masks = current_masks.clone()
+            current_masks[batch_idx, first_mask_idx, :] = 1
+
+            all_imputed.append(first_features)
+            all_imputed_truth.append(first_imputed_truth.unsqueeze(1))
+
+        all_imputed = torch.cat(all_imputed, dim=1)
+        all_imputed_truth = torch.cat(all_imputed_truth, dim=1)
+
+        decoded_imputed = self.ais_decoder(all_imputed)
+        loss_total, loss_tuple = compute_loss(decoded_imputed, all_imputed_truth)
+
+        return loss_total, loss_tuple
 
 
 def _prepare_brits_data(ais_data, encoded_data, masks):
@@ -101,11 +124,14 @@ def _prepare_brits_data(ais_data, encoded_data, masks):
     return data
 
 
-def compute_loss(predictions, targets, masks):
-    negated_masks = 1 - masks
-    loss_mae = torch.sum(torch.abs(predictions - targets) * negated_masks) / (torch.sum(negated_masks) + 1e-9)
+def compute_loss(predictions: torch.Tensor, truths: torch.Tensor):
+    loss_mae = nn.L1Loss()(predictions, truths)
+    epsilon = 1e-6
+    smape_numerator = torch.abs(predictions - truths)
+    smape_denominator = (torch.abs(predictions) + torch.abs(truths)) + epsilon
+    loss_smape = torch.mean(smape_numerator / smape_denominator)
 
-    loss_smape = torch.sum(torch.abs(predictions - targets) * negated_masks) / \
-        (torch.sum(torch.abs(targets) + torch.abs(predictions)) / 2 + 1e-9)
+    alpha, beta = 0.5, 0.5
+    loss_total = alpha * loss_mae + beta * loss_smape
 
-    return loss_mae, loss_smape
+    return loss_total, (loss_mae, loss_smape)

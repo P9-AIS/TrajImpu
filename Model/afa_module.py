@@ -46,7 +46,7 @@ class AFAModule(nn.Module):
         b, s, _ = vals.shape
         num_forces = len(self._force_providers)
 
-        all_forces = torch.empty(b, s, num_forces, 3)
+        all_forces = torch.empty(b, s, num_forces, 3, device=vals.device)
 
         for i, provider in enumerate(self._force_providers):
             forces = provider.get_forces(vals)
