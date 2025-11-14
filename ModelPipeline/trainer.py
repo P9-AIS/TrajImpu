@@ -68,7 +68,7 @@ class Trainer:
         with torch.enable_grad():
             for batch_no, batch in enumerate(it, start=1):
                 self._optimizer.zero_grad()
-                loss, _ = self._model.forward(batch)
+                loss = self._model.forward(batch).total_loss
                 loss.backward()
                 self._optimizer.step()
 
@@ -96,7 +96,7 @@ class Trainer:
 
         with torch.no_grad():
             for batch_no, batch in enumerate(it, start=1):
-                loss, _ = self._model.forward(batch)
+                loss = self._model.forward(batch).total_loss
 
                 total_loss += loss.item()
                 average_loss = total_loss / batch_no

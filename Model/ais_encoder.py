@@ -175,9 +175,7 @@ class HeterogeneousAttributeEncoder(nn.Module):
         self.vessel_type_discrete_encoder = DiscreteEncoder(
             feature_dim, num_classes=max(int(t) for t in stats.vessel_types))
 
-        self.output_dim = (8 * feature_dim)
-
-        self.timestamp_col_idx = AISColDict.TIMESTAMP.value
+        self.output_dim = (len(AISColDict) * feature_dim)
         self.latitude_col_idx = AISColDict.LATITUDE.value
 
     def forward(self, ais_data: torch.Tensor):
@@ -230,8 +228,8 @@ class HeterogeneousAttributeEncoder(nn.Module):
                             cog_output, heading_angle_output,
                             draught_output, sog_output, rot_output,
                             vessel_type_output),
-                           dim=2)  # shape [b, s, 8, feature_dim]
+                           dim=2)  # shape [b, s, len(AISColDict), feature_dim]
 
-        output = output.view(b, s, -1)  # shape [b, s, 8*feature_dim]
+        output = output.view(b, s, -1)  # shape [b, s, len(AISColDict)*feature_dim]
 
         return output

@@ -1,57 +1,39 @@
+from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ModelTypes.ais_col_dict import AISColDict
 from ModelTypes.ais_stats import AISStats
 
 
 class SpatioDecoder(nn.Module):
     def __init__(self, feature_dim):
         super(SpatioDecoder, self).__init__()
-        self.W_lambda = nn.Linear(feature_dim * 2, 1, bias=True)
-        self.W_phi = nn.Linear(feature_dim * 2, 1, bias=True)
-        self.gamma_lambda = nn.Parameter(torch.tensor(0.1))
-        self.gamma_phi = nn.Parameter(torch.tensor(0.1))
 
-    def calculate_sliding_window_base(self, values, missing_value, window_size=5):
-        batch_size, seq_len = values.shape
-        device = values.device
+        self.lat_mlp = nn.Sequential(
+            nn.Linear(feature_dim, 1),
+            nn.Tanh(),
+        )
+        self.lon_mlp = nn.Sequential(
+            nn.Linear(feature_dim, 1),
+            nn.Tanh(),
+        )
 
-        mask = (values != missing_value).float()  # [batch_size, seq_len]
-        masked_values = values * mask
+    def forward(self, e_lat, e_lon):
+        b, s, f = e_lat.shape
+        e_lat_flat = e_lat.view(b*s, f)
+        e_lon_flat = e_lon.view(b*s, f)
 
-        window_sums = torch.zeros(batch_size, seq_len, device=device)
-        window_counts = torch.zeros(batch_size, seq_len, device=device)
+        # Predict normalized values in [-1, 1]
+        lat_norm = self.lat_mlp(e_lat_flat)    # [b*s, 1]
+        lon_norm = self.lon_mlp(e_lon_flat)    # [b*s, 1]
 
-        pad_size = window_size
-        padded_values = F.pad(masked_values, (pad_size, pad_size), "constant", 0)
-        padded_mask = F.pad(mask, (pad_size, pad_size), "constant", 0)
+        # Map back to real coordinate ranges
+        lat_hat = lat_norm * 90.0              # [-90, 90]
+        lon_hat = lon_norm * 180.0             # [-180, 180]
 
-        for i in range(2 * window_size + 1):
-            window_sums += padded_values[:, i:i+seq_len]
-            window_counts += padded_mask[:, i:i+seq_len]
-
-        window_counts = torch.clamp(window_counts, min=1.0)
-        window_avg = window_sums / window_counts
-
-        return torch.deg2rad(window_avg.reshape(-1))
-
-    def forward(self, e_lambda, e_phi, raw_lambda, raw_phi):
-        # Concatenate longitude and latitude embeddings
-        concat_features = torch.cat([e_lambda.squeeze(1), e_phi.squeeze(1)], dim=-1)  # [b*s, 2f]
-        delta_lambda = torch.tanh(self.W_lambda(concat_features)) * self.gamma_lambda
-        delta_phi = torch.tanh(self.W_phi(concat_features)) * self.gamma_phi
-
-        with torch.no_grad():
-            lambda_base = self.calculate_sliding_window_base(raw_lambda, 181)
-            phi_base = self.calculate_sliding_window_base(raw_phi, 91)
-
-        lambda_pred = lambda_base.unsqueeze(1) + delta_lambda
-        phi_pred = phi_base.unsqueeze(1) + delta_phi
-
-        spatio_pred = torch.cat([lambda_pred, phi_pred], dim=1)
-        delta_coord = torch.cat([delta_lambda, delta_phi], dim=1)
-        return spatio_pred, delta_coord
+        return lat_hat, lon_hat
 
 
 class CyclicalDecoder(nn.Module):
@@ -157,14 +139,21 @@ class DiscreteDecoder(nn.Module):
 
         # # Step 4: Hierarchical label smoothing
         uniform_dist = torch.full_like(s, 1.0 / s.size(-1))  # Uniform distribution [|C|]
-        hat_y = (1 - self.smoothing_factor) * s + self.smoothing_factor * uniform_dist  # Smoothed probabilities
-        # hat_y = s
+        dist_y = (1 - self.smoothing_factor) * s + self.smoothing_factor * uniform_dist  # Smoothed probabilities
+        vessel_type_hat = torch.argmax(dist_y, dim=-1).unsqueeze(-1)
 
-        assert not torch.isnan(hat_y).any(), "discrete_decoder-hat_y contains NaN values"
-        assert not torch.isinf(hat_y).any(), "discrete_decoder-hat_y contains Inf values"
+        # get the final
+
+        assert not torch.isnan(dist_y).any(), "discrete_decoder-hat_y contains NaN values"
+        assert not torch.isinf(dist_y).any(), "discrete_decoder-hat_y contains Inf values"
 
         # [b*s, |C|] #[b*s, d], [b*s, d]
-        return hat_y, z
+        return vessel_type_hat, logits
+
+
+@dataclass
+class ExtraDecodeOutput:
+    vessel_type_prob_logits: torch.Tensor
 
 
 class HeterogeneousAttributeDecoder(nn.Module):
@@ -196,16 +185,16 @@ class HeterogeneousAttributeDecoder(nn.Module):
     def forward(self, ais_data: torch.Tensor):
         b, s, f = ais_data.shape
 
-        af = f // 8
+        af = f // len(AISColDict)
 
-        lat_encoding = ais_data[:, :, 0*af:1*af]
-        lon_encoding = ais_data[:, :, 1*af:2*af]
-        cog_encoding = ais_data[:, :, 2*af:3*af]
-        heading_encoding = ais_data[:, :, 3*af:4*af]
-        draught_encoding = ais_data[:, :, 4*af:5*af]
-        sog_encoding = ais_data[:, :, 5*af:6*af]
-        rot_encoding = ais_data[:, :, 6*af:7*af]
-        vessel_type_encoding = ais_data[:, :, 7*af:8*af]
+        lat_encoding = ais_data[:, :, AISColDict.LATITUDE.value*af: (AISColDict.LATITUDE.value+1)*af]
+        lon_encoding = ais_data[:, :, AISColDict.LONGITUDE.value*af: (AISColDict.LONGITUDE.value+1)*af]
+        cog_encoding = ais_data[:, :, AISColDict.COG.value*af: (AISColDict.COG.value+1)*af]
+        heading_encoding = ais_data[:, :, AISColDict.HEADING.value*af: (AISColDict.HEADING.value+1)*af]
+        draught_encoding = ais_data[:, :, AISColDict.DRAUGHT.value*af: (AISColDict.DRAUGHT.value+1)*af]
+        sog_encoding = ais_data[:, :, AISColDict.SOG.value*af: (AISColDict.SOG.value+1)*af]
+        rot_encoding = ais_data[:, :, AISColDict.ROT.value*af: (AISColDict.ROT.value+1)*af]
+        vessel_type_encoding = ais_data[:, :, AISColDict.VESSEL_TYPE.value*af: (AISColDict.VESSEL_TYPE.value+1)*af]
 
         draught_min = torch.tensor(self.stats.min_draught, device=ais_data.device)
         draught_max = torch.tensor(self.stats.max_draught, device=ais_data.device)
@@ -228,14 +217,15 @@ class HeterogeneousAttributeDecoder(nn.Module):
             draught_encoding, min_val=draught_min_matrix, max_val=draught_max_matrix)
         sog_hat = self.sog_continuous_decoder(sog_encoding, min_val=sog_min_matrix, max_val=sog_max_matrix)
         rot_hat = self.rot_continuous_decoder(rot_encoding, min_val=rot_min_matrix, max_val=rot_max_matrix)
-        vessel_type_hat = self.vessel_type_discrete_decoder(vessel_type_encoding)
+        vessel_type_hat, prob_dist = self.vessel_type_discrete_decoder(vessel_type_encoding)
 
-        return (lat_hat.view(b, s, -1),
-                lon_hat.view(b, s, -1),
-                cog_hat.view(b, s, -1),
-                heading_hat.view(b, s, -1),
-                draught_hat.view(b, s, -1),
-                sog_hat.view(b, s, -1),
-                rot_hat.view(b, s, -1),
-                vessel_type_hat[0].view(b, s, -1),
-                )
+        output = torch.cat([
+            lat_hat, lon_hat, cog_hat, heading_hat,
+            draught_hat, sog_hat, rot_hat, vessel_type_hat
+        ], dim=-1).view(b, s, -1)  # [b, s, num_ais_attr]
+
+        extra = ExtraDecodeOutput(
+            vessel_type_prob_logits=prob_dist.view(b, s, -1)
+        )
+
+        return output, extra

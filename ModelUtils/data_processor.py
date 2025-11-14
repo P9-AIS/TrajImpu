@@ -91,7 +91,7 @@ class DataProcessor:
     def _process_dataset(self, dataset: AISDatasetRaw) -> AISDatasetProcessed:
         data = self._get_data(dataset)
         # labels = self._get_labels(dataset)
-        return AISDatasetProcessed(data, data)
+        return AISDatasetProcessed(data)
 
     def _get_data(self, dataset: AISDatasetRaw) -> np.ndarray:
         groups = DataProcessor._group_dataset(dataset)
@@ -107,9 +107,6 @@ class DataProcessor:
                 trajectories = np.vstack((trajectories, np.array(group_trajectories, dtype=np.float32)))
 
         return trajectories
-
-    def _get_labels(self, dataset: AISDatasetRaw) -> np.ndarray:
-        return np.array([])
 
     def _get_masks(self, dataset: AISDatasetProcessed) -> np.ndarray:
         num_trajs = dataset.data.shape[0]
@@ -147,7 +144,7 @@ class DataProcessor:
         return groups
 
     def _get_trajectories_from_group(self, group: AISDatasetRaw, traj_len: int) -> np.ndarray:
-        data = group.dataset[:, 1:]  # drop mmsi col
+        data = np.delete(group.dataset, 1, axis=1)  # drop mmsi col
         num_attributes = data.shape[1]
         candidate_trajectories = []
 

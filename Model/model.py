@@ -6,9 +6,10 @@ from ForceProviders.i_force_provider import IForceProvider
 from Model.ais_encoder import HeterogeneousAttributeEncoder
 from Model.afa_module import AFAModule
 from Model.brits import BRITS
-from Model.ais_decoder import HeterogeneousAttributeDecoder
+from Model.ais_decoder import ExtraDecodeOutput, HeterogeneousAttributeDecoder
 from ModelTypes.ais_dataset_masked import AISBatch
 from ModelTypes.ais_stats import AISStats
+from ModelUtils.loss_calculator import LossCalculator, LossOutput
 
 
 @dataclass
@@ -33,7 +34,7 @@ class Config:
 
 
 class Model(nn.Module):
-    def __init__(self, dataset_stats: AISStats, force_providers: list[IForceProvider], cfg: Config):
+    def __init__(self, dataset_stats: AISStats, force_providers: list[IForceProvider], loss_calculator: LossCalculator, cfg: Config):
         super().__init__()
         self.ais_encoder = HeterogeneousAttributeEncoder(
             cfg.dim_ais_attr_encoding, dataset_stats, cfg.max_delta).to(cfg.device)
@@ -47,7 +48,9 @@ class Model(nn.Module):
         self.ais_decoder = HeterogeneousAttributeDecoder(
             self.ais_encoding_dim, dataset_stats, self.ais_encoding_dim).to(cfg.device)
 
-    def forward(self, ais_batch: AISBatch):
+        self.loss_calculator = loss_calculator
+
+    def forward(self, ais_batch: AISBatch) -> LossOutput:
         ais_batch.observed_data = ais_batch.observed_data.contiguous().to(self._cfg.device)
         ais_batch.masks = ais_batch.masks.to(self._cfg.device)
 
@@ -57,8 +60,9 @@ class Model(nn.Module):
         fine_masks = torch.repeat_interleave(ais_batch.masks, self._cfg.dim_ais_attr_encoding, dim=2)
         current_masks = fine_masks.clone()
 
-        all_imputed = []
-        all_imputed_truth = []
+        all_imputed: list[torch.Tensor] = []
+        all_imputed_extra: list[ExtraDecodeOutput] = []
+        all_imputed_truth: list[torch.Tensor] = []
 
         for _ in range(ais_batch.num_missing_values):
             brits_data = _prepare_brits_data(ais_batch.observed_data, features, current_masks)
@@ -71,10 +75,10 @@ class Model(nn.Module):
             # Gather imputed feature for that position
             batch_idx = torch.arange(imputed.size(0), device=imputed.device)
             first_imputed = imputed[batch_idx, first_mask_idx, :]                  # [b, feat_dim]
-            first_imputed_truth = ais_batch.observed_data[batch_idx, first_mask_idx, :]
+            first_imputed_truth = ais_batch.observed_data[batch_idx, first_mask_idx, :]  # [b, num_ais_attr]
 
             # Decode -> enrich -> re-encode
-            first_decoded = self.ais_decoder(first_imputed.unsqueeze(1))           # [b, 1, num_ais_attr]
+            first_decoded, extra = self.ais_decoder(first_imputed.unsqueeze(1), )           # [b, 1, num_ais_attr]
             first_encoded = self.ais_encoder(first_decoded)                        # [b, 1, feat_dim]
             first_features, _ = self.afa_module(first_decoded, first_encoded)      # [b, 1, feat_dim]
 
@@ -87,16 +91,14 @@ class Model(nn.Module):
             current_masks = current_masks.clone()
             current_masks[batch_idx, first_mask_idx, :] = 1
 
-            all_imputed.append(first_features)
+            all_imputed.append(first_decoded)
+            all_imputed_extra.append(extra)
             all_imputed_truth.append(first_imputed_truth.unsqueeze(1))
 
-        all_imputed = torch.cat(all_imputed, dim=1)
-        all_imputed_truth = torch.cat(all_imputed_truth, dim=1)
+        all_imputed_tensor = torch.cat(all_imputed, dim=1)  # [b, s, num_ais_attr]
+        all_imputed_truth_tensor = torch.cat(all_imputed_truth, dim=1)  # [b, s, num_ais_attr]
 
-        decoded_imputed = self.ais_decoder(all_imputed)
-        loss_total, loss_tuple = compute_loss(decoded_imputed, all_imputed_truth)
-
-        return loss_total, loss_tuple
+        return self.loss_calculator.calculate_loss(all_imputed_tensor, all_imputed_extra, all_imputed_truth_tensor)
 
 
 def _prepare_brits_data(ais_data, encoded_data, masks):
@@ -123,16 +125,3 @@ def _prepare_brits_data(ais_data, encoded_data, masks):
         },
     }
     return data
-
-
-def compute_loss(predictions: torch.Tensor, truths: torch.Tensor):
-    loss_mae = nn.L1Loss()(predictions, truths)
-    epsilon = 1e-6
-    smape_numerator = torch.abs(predictions - truths)
-    smape_denominator = (torch.abs(predictions) + torch.abs(truths)) + epsilon
-    loss_smape = torch.mean(smape_numerator / smape_denominator)
-
-    alpha, beta = 0.5, 0.5
-    loss_total = alpha * loss_mae + beta * loss_smape
-
-    return loss_total, (loss_mae, loss_smape)

@@ -12,16 +12,16 @@ from ModelTypes.ais_stats import AISStats
 @dataclass
 class AISBatch:
     observed_data: torch.Tensor
-    observed_labels: torch.Tensor
+    observed_timestamps: torch.Tensor
     masks: torch.Tensor
     num_missing_values: int
     num_values_in_sequence: int
 
 
 class AISDatasetMasked(Dataset[AISBatch]):
-    def __init__(self, data: np.ndarray, labels: np.ndarray, masks: np.ndarray, num_masked_values: int, num_values_in_sequence: int, stats: AISStats):
+    def __init__(self, timestamps: np.ndarray, data: np.ndarray, masks: np.ndarray, num_masked_values: int, num_values_in_sequence: int, stats: AISStats):
+        self.timestamps = timestamps
         self.data = data
-        self.labels = labels
         self.masks = masks
         self.num_masked_values = num_masked_values
         self.num_values_in_sequence = num_values_in_sequence
@@ -33,7 +33,7 @@ class AISDatasetMasked(Dataset[AISBatch]):
     def __getitem__(self, idx) -> AISBatch:
         return AISBatch(
             observed_data=torch.tensor(self.data[idx], dtype=torch.float32),  # [maxlen, n]
-            observed_labels=torch.tensor(self.labels[idx], dtype=torch.float32),  # [maxlen, n]
+            observed_timestamps=torch.tensor(self.timestamps[idx], dtype=torch.float32),  # [maxlen]
             masks=torch.tensor(self.masks[idx], dtype=torch.int8),  # [maxlen, n]
             num_missing_values=self.num_masked_values,  # scalar
             num_values_in_sequence=self.num_values_in_sequence,  # scalar
@@ -43,7 +43,7 @@ class AISDatasetMasked(Dataset[AISBatch]):
     def collate_ais_batch(batch):
         return AISBatch(
             observed_data=torch.stack([b.observed_data for b in batch]),
-            observed_labels=torch.stack([b.observed_labels for b in batch]),
+            observed_timestamps=torch.stack([b.observed_timestamps for b in batch]),
             masks=torch.stack([b.masks for b in batch]),
             num_missing_values=max(b.num_missing_values for b in batch),  # or keep as list
             num_values_in_sequence=max(b.num_values_in_sequence for b in batch),  # or list
@@ -52,8 +52,8 @@ class AISDatasetMasked(Dataset[AISBatch]):
     @staticmethod
     def from_ais_dataset_processed(processed_dataset: AISDatasetProcessed, masks: np.ndarray, num_missing_values: int, num_values_in_sequence: int) -> "AISDatasetMasked":
         instance = AISDatasetMasked(
+            timestamps=processed_dataset.timestamps,
             data=processed_dataset.data,
-            labels=processed_dataset.labels,
             masks=masks,
             num_masked_values=num_missing_values,
             num_values_in_sequence=num_values_in_sequence,
@@ -62,8 +62,8 @@ class AISDatasetMasked(Dataset[AISBatch]):
         return instance
 
     def combine(self, other: "AISDatasetMasked"):
+        self.timestamps = np.vstack((self.timestamps, other.timestamps))
         self.data = np.vstack((self.data, other.data))
-        self.labels = np.vstack((self.labels, other.labels))
         self.masks = np.vstack((self.masks, other.masks))
         self.stats = self.stats.combine(other.stats)
 
@@ -74,7 +74,7 @@ class AISDatasetMasked(Dataset[AISBatch]):
             path,
             processed_ais_dataset_object=pickle.dumps(self, protocol=pickle.HIGHEST_PROTOCOL),
             data=self.data,
-            labels=self.labels,
+            timestamps=self.timestamps,
             masks=self.masks,
         )
         print(f"Saved masked ais dataset\n")
@@ -85,7 +85,7 @@ class AISDatasetMasked(Dataset[AISBatch]):
         with np.load(path, allow_pickle=True) as data:
             dataset: AISDatasetMasked = pickle.loads(data['processed_ais_dataset_object'].item())
             dataset.data = data['data']
-            dataset.labels = data['labels']
+            dataset.timestamps = data['timestamps']
             dataset.masks = data['masks']
         print(f"Loaded masked ais dataset of size {dataset.data.size}\n")
         return dataset
