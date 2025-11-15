@@ -16,7 +16,7 @@ class ModelDataUploadHandlerHTTP(IModelDataUploadHandler):
     def __init__(self, config: Config):
         self._cfg = config
 
-    def upload_trajectories(self, dataset: AISDatasetMasked, start_idx: int, end_idx: int) -> None:
+    def upload_image(self, dataset: AISDatasetMasked, start_idx: int, end_idx: int) -> None:
         end_idx = min(end_idx, len(dataset))
 
         if end_idx == -1:
@@ -29,7 +29,7 @@ class ModelDataUploadHandlerHTTP(IModelDataUploadHandler):
 
         print(f"Uploading trajectories {start_idx} to {end_idx} to {self._cfg.server_address}...")
         response = requests.post(
-            f"{self._cfg.server_address}/trajectory",
+            f"{self._cfg.server_address}/trajectories",
             data=compressed,
             headers={"Content-Type": "application/octet-stream"}  # just raw bytes
         )

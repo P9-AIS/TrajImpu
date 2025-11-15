@@ -6,13 +6,14 @@ from ForceProviders.force_provider_depth import Config as DepthForceProviderConf
 from ForceTypes.espg3034_coord import Espg3034Coord
 from ForceTypes.area import Area
 from ForceUtils.heatmap_generator import Config as HeatmapGeneratorConfig
+from ForceData.force_data_upload_handler_http import Config as ForceDataUploadHandlerConfig
 from Model.model import Config as ModelConfig
 from ModelUtils.data_loader import Config as ModelDataLoaderConfig
 from ModelData.model_data_access_handler_csv import Config as ModelDataConfig
 from ModelUtils.data_processor import MaskingStrategy, Config as ModelProcessorConfig
 from ModelPipeline.trainer import Config as ModelTrainerConfig
 from ModelUtils.loss_calculator import Config as ModelLossConfig
-from ModelData.mode_data_upload_handler_http import Config as ModelDataUploadHandlerConfig
+from ModelData.model_data_upload_handler_http import Config as ModelDataUploadHandlerConfig
 from dataclasses import dataclass
 
 
@@ -22,6 +23,7 @@ class Config:
     trafficForceProviderCfg: TrafficForceProviderConfig
     depthForceProviderCfg: DepthForceProviderConfig
     heatmapGeneratorCfg: HeatmapGeneratorConfig
+    forceDataUploadHandlerCfg: ForceDataUploadHandlerConfig
     modelCfg: ModelConfig
     modelDataLoaderCfg: ModelDataLoaderConfig
     modelDataCfg: ModelDataConfig
@@ -42,6 +44,8 @@ def parse_config(path: str) -> Config:
         depthForceProviderCfg=ConfigVisitorRegistry.visit(
             DepthForceProviderConfig, cfg_dict["depthForceProviderCfg"]),
         heatmapGeneratorCfg=ConfigVisitorRegistry.visit(HeatmapGeneratorConfig, cfg_dict["heatmapGeneratorCfg"]),
+        forceDataUploadHandlerCfg=ConfigVisitorRegistry.visit(
+            ForceDataUploadHandlerConfig, cfg_dict["forceDataUploadHandlerCfg"]),
         modelCfg=ConfigVisitorRegistry.visit(ModelConfig, cfg_dict["modelCfg"]),
         modelDataLoaderCfg=ConfigVisitorRegistry.visit(ModelDataLoaderConfig, cfg_dict["modelDataLoaderCfg"]),
         modelDataCfg=ConfigVisitorRegistry.visit(ModelDataConfig, cfg_dict["modelDataCfg"]),
@@ -106,6 +110,11 @@ ConfigVisitorRegistry.register(
 ConfigVisitorRegistry.register(
     Espg3034Coord,
     lambda data: Espg3034Coord(**data)
+)
+
+ConfigVisitorRegistry.register(
+    ForceDataUploadHandlerConfig,
+    lambda data: ForceDataUploadHandlerConfig(**data)
 )
 
 ConfigVisitorRegistry.register(

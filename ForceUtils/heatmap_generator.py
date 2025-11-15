@@ -17,7 +17,7 @@ class Config:
     color_map: str = 'jet'
 
 
-def generate_heatmap_image(vectormap: tuple[np.ndarray, np.ndarray], cfg):
+def generate_heatmap_image(vectormap: tuple[np.ndarray, np.ndarray], save: bool, cfg: Config) -> Image.Image:
     print("Generating heatmap image...")
 
     vx, vy = vectormap
@@ -39,11 +39,14 @@ def generate_heatmap_image(vectormap: tuple[np.ndarray, np.ndarray], cfg):
             resample=Image.Resampling.NEAREST
         )
 
-    filename = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-heatmap.png"
-    output_path = os.path.join(cfg.output_dir, filename)
-    img.save(output_path)
+    if save:
+        os.makedirs(cfg.output_dir, exist_ok=True)
+        filename = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}-heatmap.png"
+        output_path = os.path.join(cfg.output_dir, filename)
+        img.save(output_path)
+        print(f"✅ Heatmap saved to {output_path}")
 
-    print(f"✅ Heatmap saved to {output_path}")
+    return img
 
 
 def generate_vectormap(ff: list[list[Vec3]], tile_size: int = 25, output_dir: str = "Outputs/Vectormaps"):
