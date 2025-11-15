@@ -77,7 +77,7 @@ class AISDatasetMasked(Dataset[AISBatch]):
             timestamps=self.timestamps,
             masks=self.masks,
         )
-        print(f"Saved masked ais dataset\n")
+        print(f"Saved masked ais dataset of {self.data.shape[0]:,} trajectories\n")
 
     @staticmethod
     def load(path: str) -> "AISDatasetMasked":
@@ -87,5 +87,5 @@ class AISDatasetMasked(Dataset[AISBatch]):
             dataset.data = data['data']
             dataset.timestamps = data['timestamps']
             dataset.masks = data['masks']
-        print(f"Loaded masked ais dataset of size {dataset.data.size}\n")
+        print(f"Loaded masked ais dataset of {dataset.data.shape[0]:,} trajectories\n")
         return dataset

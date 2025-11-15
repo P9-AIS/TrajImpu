@@ -23,7 +23,9 @@ class AISDatasetProcessed():
 
         reverse_vessel_type_dict: dict[VesselType, int] = {v: k for k, v in stats.vessel_type_dict.items()}
         vessel_type_column = data[:, :, AISColDict.VESSEL_TYPE.value].astype(int)
-        vessel_type_indices = np.vectorize(reverse_vessel_type_dict.get)(vessel_type_column)
+        vec_to_enum = np.vectorize(lambda x: VesselType(x))
+        vessel_type_enum = vec_to_enum(vessel_type_column)
+        vessel_type_indices = np.vectorize(reverse_vessel_type_dict.get)(vessel_type_enum)
         data[:, :, AISColDict.VESSEL_TYPE.value] = vessel_type_indices
         return data, stats, timestamps
 
@@ -69,7 +71,7 @@ class AISDatasetProcessed():
             data=self.data,
             timestamps=self.timestamps,
         )
-        print(f"Saved processed ais dataset\n")
+        print(f"Saved processed ais dataset of {self.data.shape[0]:,} trajectories\n")
 
     @staticmethod
     def load(path: str) -> "AISDatasetProcessed":
@@ -78,5 +80,5 @@ class AISDatasetProcessed():
             dataset: AISDatasetProcessed = pickle.loads(data['processed_ais_dataset_object'].item())
             dataset.data = data['data']
             dataset.timestamps = data['timestamps']
-        print(f"Loaded processed ais dataset of size {dataset.data.size}\n")
+        print(f"Loaded processed ais dataset of {dataset.data.shape[0]:,} trajectories\n")
         return dataset

@@ -49,16 +49,12 @@ heatmapGeneratorCfg:
   target_pixel_size: 4000
   color_map: 'jet' # Options: 'plasma', 'viridis', 'inferno', 'jet'
 
+
 modelCfg:
-    device: "cpu"
+    device: "cuda"
 
     # encoder
     dim_ais_attr_encoding: 16
-    num_ais_attributes: 14
-    num_navi_status_class: 0
-    num_destination_class: 0
-    num_cargo_type_class: 0
-    num_vessel_type_class: 0
     max_delta: 0.0
 
     # afa module
@@ -66,7 +62,6 @@ modelCfg:
     num_head: 4
 
     # brits
-    seq_len: 64
     dim_rnn_hidden: 10
     MIT: true
 
@@ -84,7 +79,7 @@ modelDataLoaderCfg:
   num_workers: 4
   train_split: 0.8 # Proportion of data used for training
   start_date: 2024-03-01
-  end_date: 2024-03-02
+  end_date: 2024-03-01
   date_step: 1
 
 modelDataProcessorCfg:
@@ -104,3 +99,16 @@ modelTrainerCfg:
   weight_decay: 0.0001
   validation_patience: 3
   validation_every_n_epochs: 5
+
+modelLossCfg:
+  spatial_weight: 1.0
+  cog_weight: 1.0
+  heading_weight: 1.0
+  draught_weight: 1.0
+  sog_weight: 1.0
+  rot_weight: 1.0
+  vessel_type_weight: 1.0
+
+
+modelDataUploadHandlerCfg:
+  server_address: "http://localhost:4000"

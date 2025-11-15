@@ -20,7 +20,7 @@ class AISDatasetRaw:
             raw_ais_dataset_object=pickle.dumps(self, protocol=pickle.HIGHEST_PROTOCOL),
             dataset=self.dataset
         )
-        print(f"Saved raw ais dataset of size {self.dataset.size}\n")
+        print(f"Saved raw ais dataset of {self.dataset.size:,} records \n")
 
     @staticmethod
     def load(path: str) -> "AISDatasetRaw":

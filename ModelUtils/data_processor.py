@@ -41,7 +41,7 @@ class DataProcessor:
         self._rng = np.random.default_rng()
         self._num_masked_values = int(self._cfg.masking_percentage * self._cfg.traj_len)
 
-        if (self._cfg.lead_len * 2) / self._cfg.traj_len < self._cfg.masking_percentage:
+        if self._cfg.masking_percentage * self._cfg.traj_len >= (self._cfg.traj_len - 2 * self._cfg.lead_len):
             raise ValueError("Masking percentage is too high for the given lead length and trajectory length.")
 
     def get_masked_data(self, dates: list[dt.date]) -> AISDatasetMasked:

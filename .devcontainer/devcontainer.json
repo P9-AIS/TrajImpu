@@ -30,7 +30,9 @@
     "--gpus",
     "all",
     "--shm-size",
-    "96gb"
+    "96gb",
+    "--network",
+    "trajviz_devcontainer_TrajNet"
   ],
   "mounts": [
     "type=bind,source=/mnt/dataimputationgroup/Data,target=${containerWorkspaceFolder}/Data"
