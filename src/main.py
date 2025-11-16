@@ -9,20 +9,26 @@ from Connection.postgres_connection import PostgresConnection
 from ForceTypes.params import Params
 from ModelUtils.data_loader import AisDataLoader
 from ModelUtils.data_processor import DataProcessor
+from ForceUtils.geo_converter import GeoConverter as gc
 
 
 def main():
     cfg = parse_config("config.yaml")
 
-    # prov_traffic = TrafficForceProvider(ForceDataAccessHandlerDb(
-    #     PostgresConnection(cfg.postgresCfg)), cfg.trafficForceProviderCfg)
+    area = cfg.depthForceProviderCfg.area
 
-    # generate_heatmap_image(prov_traffic.get_vectormap(), cfg.heatmapGeneratorCfg)
+    print(gc.epsg3034_to_espg4326(area.bottom_left.E, area.bottom_left.N))
+    print(gc.epsg3034_to_espg4326(area.top_right.E, area.top_right.N))
 
-    data_handler = ModelDataAccessHandlerCSV(cfg.modelDataCfg)
-    data_processor = DataProcessor(data_handler, cfg.modelDataProcessorCfg)
-    train_loader, test_loader = AisDataLoader.get_data_loaders(cfg.modelDataLoaderCfg, data_processor)
-    print("well well well...")
+    # # prov_traffic = TrafficForceProvider(ForceDataAccessHandlerDb(
+    # #     PostgresConnection(cfg.postgresCfg)), cfg.trafficForceProviderCfg)
+
+    # # generate_heatmap_image(prov_traffic.get_vectormap(), cfg.heatmapGeneratorCfg)
+
+    # data_handler = ModelDataAccessHandlerCSV(cfg.modelDataCfg)
+    # data_processor = DataProcessor(data_handler, cfg.modelDataProcessorCfg)
+    # train_loader, test_loader = AisDataLoader.get_data_loaders(cfg.modelDataLoaderCfg, data_processor)
+    # print("well well well...")
 
     # prov_depth = DepthForceProvider(DataAccessHandler(PostgresConnection(cfg.postgresCfg)), cfg.depthForceProviderCfg)
     # generate_heatmap_image(prov_depth.get_vectormap(), cfg.heatmapGeneratorCfg)

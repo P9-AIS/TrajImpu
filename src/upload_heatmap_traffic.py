@@ -14,4 +14,4 @@ if __name__ == "__main__":
     image = generate_heatmap_image(traffic_provider.get_vectormap(), False, cfg.heatmapGeneratorCfg)
 
     upload_handler = ForceDataUploadHandlerHTTP(cfg.forceDataUploadHandlerCfg)
-    upload_handler.upload_image(image, "traffic_heatmap", cfg.trafficForceProviderCfg.area)
+    upload_handler.upload_image_3034(image, "traffic_heatmap", cfg.trafficForceProviderCfg.area)

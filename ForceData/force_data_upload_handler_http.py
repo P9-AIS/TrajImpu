@@ -1,4 +1,6 @@
 from io import BytesIO
+
+from matplotlib import image
 from ForceData.i_force_data_upload_handler import IForceDataUploadHandler
 from ForceTypes.area import Area
 from ModelTypes.ais_dataset_masked import AISDatasetMasked
@@ -39,11 +41,12 @@ class ForceDataUploadHandlerHTTP(IForceDataUploadHandler):
 
         print(response.status_code, response.json())
 
-    def upload_image(self, image: Image.Image, name: str, area: Area) -> None:
-        buf = BytesIO()
-        image_format = image.format if image.format else "PNG"
-        image.save(buf, format=image_format)
-        buf.seek(0)
+    def upload_image(self, image_path: str, name: str, area: Area) -> None:
+        with open(image_path, "rb") as f:
+            img_bytes = f.read()
+
+        ext = image_path.split(".")[-1].lower()
+        image_format = ext if ext in ["png", "jpg", "jpeg", "tif", "tiff"] else "png"
 
         top_right_lon, top_right_lat = GC.epsg3034_to_espg4326(area.top_right.E, area.top_right.N)
         bottom_left_lon, bottom_left_lat = GC.epsg3034_to_espg4326(area.bottom_left.E, area.bottom_left.N)
@@ -54,7 +57,7 @@ class ForceDataUploadHandlerHTTP(IForceDataUploadHandler):
         })
 
         files = {
-            "image": (f"{name}.{image_format.lower()}", buf, f"image/{image_format.lower()}"),
+            "image": (f"{name}.{image_format.lower()}", img_bytes, f"image/{image_format.lower()}"),
         }
         data = {
             "name": name,
