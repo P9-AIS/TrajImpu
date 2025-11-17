@@ -11,12 +11,14 @@ class SpatioDecoder(nn.Module):
     def __init__(self, feature_dim):
         super(SpatioDecoder, self).__init__()
 
+        af = feature_dim // len(AISColDict)
+
         self.lat_mlp = nn.Sequential(
-            nn.Linear(feature_dim, 1),
+            nn.Linear(af, 1),
             nn.Tanh(),
         )
         self.lon_mlp = nn.Sequential(
-            nn.Linear(feature_dim, 1),
+            nn.Linear(af, 1),
             nn.Tanh(),
         )
 
@@ -48,9 +50,11 @@ class CyclicalDecoder(nn.Module):
         """
         super(CyclicalDecoder, self).__init__()
 
+        af = feature_dim // len(AISColDict)
+
         # MLP with custom activation to generate trigonometric components
         self.mlp_phi = nn.Sequential(
-            nn.Linear(feature_dim, 2),
+            nn.Linear(af, 1),
             nn.Tanh(),
         )
 
@@ -71,8 +75,11 @@ class ContinuousDecoderTwo(nn.Module):
     def __init__(self, feature_dim):
         super().__init__()
         # MLP to generate h_n ∈ R
+
+        af = feature_dim // len(AISColDict)
+
         self.mlp = nn.Sequential(
-            nn.Linear(feature_dim, 1, bias=False),
+            nn.Linear(af, 1, bias=False),
             nn.Tanh(),
         )
 
@@ -98,14 +105,16 @@ class DiscreteDecoder(nn.Module):
         Parameters:
         - feature_dim: Dimension of the input features (f).
         - num_classes: Number of classes (|C|).
-        - class_prototypes: Predefined class prototypes (\mathbf{w}_i), shape [|C|, d].
+        - class_prototypes: Predefined class prototypes (mathbf{w}_i), shape [|C|, d].
         - smoothing_factor: Hierarchical label smoothing factor (\alpha).
         """
         super(DiscreteDecoder, self).__init__()
 
+        af = feature_dim // len(AISColDict)
+
         # MLP to generate intermediate representation \mathbf{z}
         self.mlp = nn.Sequential(
-            nn.Linear(feature_dim, output_dim),
+            nn.Linear(af, af),
         )
 
         # Learnable temperature parameter
@@ -113,7 +122,7 @@ class DiscreteDecoder(nn.Module):
         # nn.init.xavier_uniform_(self.temperature)
 
         # Class prototypes (\mathbf{w}_i)
-        self.class_prototypes = nn.Linear(in_features=num_classes, out_features=output_dim, bias=False)  # [|C|, d]
+        self.class_prototypes = nn.Linear(in_features=num_classes, out_features=af, bias=False)  # [|C|, d]
 
         # Smoothing factor (\alpha)
         self.smoothing_factor = smoothing_factor
@@ -220,8 +229,7 @@ class HeterogeneousAttributeDecoder(nn.Module):
         vessel_type_hat, prob_dist = self.vessel_type_discrete_decoder(vessel_type_encoding)
 
         output = torch.cat([
-            lat_hat, lon_hat, cog_hat, heading_hat,
-            draught_hat, sog_hat, rot_hat, vessel_type_hat
+            lat_hat, lon_hat, rot_hat, sog_hat, cog_hat, heading_hat, vessel_type_hat, draught_hat
         ], dim=-1).view(b, s, -1)  # [b, s, num_ais_attr]
 
         extra = ExtraDecodeOutput(

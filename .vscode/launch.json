@@ -10,12 +10,16 @@
             "justMyCode": true
         },
         {
-            "name": "Python Debugger: train",
+            "name": "Python Debugger: train (CUDA debug)",
             "type": "debugpy",
             "request": "launch",
             "module": "src.train",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true,
+            "env": {
+                "CUDA_LAUNCH_BLOCKING": "1",
+                "TORCH_USE_CUDA_DSA": "1"
+            }
         },
         {
             "name": "Python Debugger: upload traj",

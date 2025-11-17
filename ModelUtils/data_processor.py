@@ -24,8 +24,8 @@ class Config:
     output_dir: str = "Data"
     masking_strategy: MaskingStrategy = MaskingStrategy.POINT_MISSING
     masking_percentage: float = 0.1
+    min_sog: float = 1
     max_time_gap: float = 600.0
-    min_traj_gap_distance_m: float = 0.0
     max_traj_gap_distance_m: float = 50.0
 
 
@@ -86,7 +86,7 @@ class DataProcessor:
         return processed_data_file_paths
 
     def _get_dataset_filename(self, date: dt.date) -> str:
-        return f"{self._cfg.output_dir}/AISDatasetProcessed/{self._cfg.traj_len=}-date={date}.npz"
+        return f"{self._cfg.output_dir}/AISDatasetProcessed/{self._cfg.traj_len=}-{self._cfg.lead_len=}-{self._cfg.min_sog=}-{self._cfg.max_time_gap=}-{self._cfg.max_traj_gap_distance_m=}-date={date}.npz"
 
     def _process_dataset(self, dataset: AISDatasetRaw) -> AISDatasetProcessed:
         data = self._get_data(dataset)
@@ -111,7 +111,7 @@ class DataProcessor:
     def _get_masks(self, dataset: AISDatasetProcessed) -> np.ndarray:
         num_trajs = dataset.data.shape[0]
         seq_length = dataset.data.shape[1]
-        num_attributes = dataset.data.shape[2] - 1  # exclude timestamp
+        num_attributes = dataset.data.shape[2]
 
         masks = np.ones((num_trajs, seq_length, num_attributes), dtype=np.int8)
 
@@ -188,11 +188,17 @@ class DataProcessor:
         if time_gap > self._cfg.max_time_gap:
             return True
 
-        loc_1 = point_1[2:4]
-        loc_2 = point_2[2:4]
+        loc_1 = point_1[1:3]
+        loc_2 = point_2[1:3]
         distance = GeoUtils.haversine_distance_km(loc_1[0], loc_1[1], loc_2[0], loc_2[1]) * 1000.0
 
-        if not (self._cfg.min_traj_gap_distance_m <= distance <= self._cfg.max_traj_gap_distance_m):
+        # if not (self._cfg.min_traj_gap_distance_m <= distance <= self._cfg.max_traj_gap_distance_m):
+        #     return True
+
+        sog_1 = point_1[4]
+        sog_2 = point_2[4]
+
+        if distance > self._cfg.max_traj_gap_distance_m or sog_1 < 1 or sog_2 < 1:
             return True
 
         return False

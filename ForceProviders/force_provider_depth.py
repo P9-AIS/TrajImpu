@@ -13,6 +13,7 @@ import numpy as np
 from ForceData.force_data_access_handler_db import ForceDataAccessHandlerDb
 from tqdm import tqdm
 from ForceUtils.geo_converter import GeoConverter as gc
+from ModelTypes.ais_col_dict import AISColDict
 
 
 @dataclass
@@ -129,8 +130,8 @@ class DepthForceProvider(IForceProvider):
         for i in range(b):
             batch_forces = []
             for j in range(s):
-                lon = vals[i, j, 3].item()
-                lat = vals[i, j, 2].item()
+                lon = vals[i, j, AISColDict.LONGITUDE.value].item()
+                lat = vals[i, j, AISColDict.LATITUDE.value].item()
                 force_vec = self.get_force(Params(lon=lon, lat=lat))
                 batch_forces.append([force_vec.x, force_vec.y, force_vec.z])
             forces.append(batch_forces)

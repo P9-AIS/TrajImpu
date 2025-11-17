@@ -13,6 +13,7 @@ import datetime as dt
 from ModelTypes.ais_dataset_raw import AISDatasetRaw
 from ForceTypes.vessel_types import VesselType
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import re
 
 
 @dataclass
@@ -182,12 +183,7 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
         if not raw_value:
             return float(VesselType.UNKNOWN.value)
 
-        key = (
-            raw_value.replace("/", "")
-            .replace("-", "")
-            .replace(" ", "")
-            .upper()
-        )
+        key = re.sub(r"[\/\-\s]", "", raw_value).upper()
 
         enum_val = VesselType.__members__.get(key, VesselType.UNKNOWN)
         return float(enum_val.value)
@@ -241,6 +237,9 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
         print("Filtering out-of-bounds latitude and longitude...")
         df = df[((df['Latitude'] >= -90) & (df['Latitude'] <= 90)) &
                 ((df['Longitude'] >= -180) & (df['Longitude'] <= 180))]
+
+        print("Removing duplicate messages (same MMSI + timestamp)...")
+        df = df.drop_duplicates(subset=["MMSI", "# Timestamp"])
 
         print("Converting DataFrame to numpy array...")
         data_array = df.to_numpy(dtype=float)

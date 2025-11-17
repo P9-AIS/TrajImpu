@@ -16,4 +16,4 @@ if __name__ == "__main__":
     upload_handler = ModelDataUploadHandlerHTTP(cfg.modelDataUploadHandlerCfg)
 
     masked_data = data_processor.get_masked_data([dt.date(2024, 3, 1)])
-    upload_handler.upload_image(masked_data, 0, -1)
+    upload_handler.upload_trajectories(masked_data, 0, -1)

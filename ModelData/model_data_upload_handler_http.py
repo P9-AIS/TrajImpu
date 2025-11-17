@@ -16,7 +16,7 @@ class ModelDataUploadHandlerHTTP(IModelDataUploadHandler):
     def __init__(self, config: Config):
         self._cfg = config
 
-    def upload_image(self, dataset: AISDatasetMasked, start_idx: int, end_idx: int) -> None:
+    def upload_trajectories(self, dataset: AISDatasetMasked, start_idx: int, end_idx: int) -> None:
         end_idx = min(end_idx, len(dataset))
 
         if end_idx == -1:

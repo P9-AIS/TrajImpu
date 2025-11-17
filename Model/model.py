@@ -57,12 +57,14 @@ class Model(nn.Module):
         encoded = self.ais_encoder(ais_batch.observed_data)
         features, _ = self.afa_module(ais_batch.observed_data, encoded)
 
-        fine_masks = torch.repeat_interleave(ais_batch.masks, self._cfg.dim_ais_attr_encoding, dim=2)
-        current_masks = fine_masks.clone()
+        current_masks = torch.repeat_interleave(ais_batch.masks, self._cfg.dim_ais_attr_encoding, dim=2).detach()
+        # current_masks = fine_masks.clone().detach()
 
         all_imputed: list[torch.Tensor] = []
         all_imputed_extra: list[ExtraDecodeOutput] = []
         all_imputed_truth: list[torch.Tensor] = []
+
+        features = features.contiguous()
 
         for _ in range(ais_batch.num_missing_values):
             brits_data = _prepare_brits_data(ais_batch.observed_data, features, current_masks)
@@ -71,25 +73,26 @@ class Model(nn.Module):
 
             # Select index of first missing value per batch
             first_mask_idx = (current_masks == 0).any(dim=2).float().argmax(dim=1)  # [b]
-
-            # Gather imputed feature for that position
             batch_idx = torch.arange(imputed.size(0), device=imputed.device)
+
             first_imputed = imputed[batch_idx, first_mask_idx, :]                  # [b, feat_dim]
             first_imputed_truth = ais_batch.observed_data[batch_idx, first_mask_idx, :]  # [b, num_ais_attr]
 
             # Decode -> enrich -> re-encode
-            first_decoded, extra = self.ais_decoder(first_imputed.unsqueeze(1), )           # [b, 1, num_ais_attr]
+            first_decoded, extra = self.ais_decoder(first_imputed.unsqueeze(1))           # [b, 1, num_ais_attr]
             first_encoded = self.ais_encoder(first_decoded)                        # [b, 1, feat_dim]
             first_features, _ = self.afa_module(first_decoded, first_encoded)      # [b, 1, feat_dim]
 
             # Replace feature at that timestep in a differentiable way
             scatter_index = first_mask_idx.view(-1, 1, 1).expand(-1, 1, features.size(2))
-            features = features.clone()
-            features.scatter_(1, scatter_index, first_features)
+            # features = features.clone()
+            # features.scatter_(1, scatter_index, first_features)
+            features = features.scatter(1, scatter_index, first_features)
+            current_masks = current_masks.scatter(1, scatter_index, 1).detach()
 
             # Mark mask as filled
-            current_masks = current_masks.clone()
-            current_masks[batch_idx, first_mask_idx, :] = 1
+            # current_masks = current_masks.clone()
+            # current_masks[batch_idx, first_mask_idx, :] = 1
 
             all_imputed.append(first_decoded)
             all_imputed_extra.append(extra)
@@ -98,7 +101,11 @@ class Model(nn.Module):
         all_imputed_tensor = torch.cat(all_imputed, dim=1)  # [b, s, num_ais_attr]
         all_imputed_truth_tensor = torch.cat(all_imputed_truth, dim=1)  # [b, s, num_ais_attr]
 
-        return self.loss_calculator.calculate_loss(all_imputed_tensor, all_imputed_extra, all_imputed_truth_tensor)
+        print("Calculating loss...")
+        loss = self.loss_calculator.calculate_loss(all_imputed_tensor, all_imputed_extra, all_imputed_truth_tensor)
+        print("Total Loss:", loss.total_loss.item())
+
+        return loss
 
 
 def _prepare_brits_data(ais_data, encoded_data, masks):

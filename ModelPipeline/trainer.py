@@ -4,6 +4,7 @@ import torch
 from tqdm import tqdm
 from Model.model import Model
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 
 @dataclass
@@ -23,6 +24,7 @@ class Trainer:
     _optimizer: torch.optim.Optimizer
 
     def __init__(self, model: Model, train_data_loader: DataLoader, validation_data_loader: DataLoader, config: Config):
+        self._writer = SummaryWriter()
         self._cfg = config
         self._train_data_loader = train_data_loader
         self._validation_data_loader = validation_data_loader
@@ -72,6 +74,7 @@ class Trainer:
                 loss.backward()
                 self._optimizer.step()
 
+                self._writer.add_scalar("loss/train", loss.item(), batch_no)
                 total_loss += loss.item()
                 average_loss = total_loss / batch_no
                 print(f"Average Training Loss: {average_loss:.4f}")

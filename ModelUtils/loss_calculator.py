@@ -63,7 +63,7 @@ class LossCalculator:
         ) * self._config.rot_weight
         vessel_type_loss = self._calc_vessel_type_loss(
             imputed_extra,
-            ground_truth[:, :, AISColDict.VESSEL_TYPE.value:].long().squeeze(-1)
+            ground_truth[:, :, AISColDict.VESSEL_TYPE.value:AISColDict.VESSEL_TYPE.value+1]
         ) * self._config.vessel_type_weight
 
         total_loss = (spatial_loss + cog_loss + heading_loss + draught_loss + sog_loss + rot_loss + vessel_type_loss)
@@ -102,6 +102,16 @@ class LossCalculator:
         return torch.nn.functional.mse_loss(imputed_rot, ground_truth_rot)
 
     def _calc_vessel_type_loss(self, imputed_extra: list[ExtraDecodeOutput], ground_truth_vessel_type: torch.Tensor) -> torch.Tensor:
-        y_pred = torch.cat([extra.vessel_type_prob_logits for extra in imputed_extra], dim=0)
-        y_true = ground_truth_vessel_type.view(-1)
+        y_pred = torch.stack([extra.vessel_type_prob_logits for extra in imputed_extra], dim=0)
+        # If imputed_extra is length batch*seq already, then torch.cat is fine
+        # Otherwise stack along batch dimension
+        y_pred = y_pred.view(-1, y_pred.shape[-1])  # flatten to [b*s, num_classes]
+
+        # Flatten ground truth
+        y_true = ground_truth_vessel_type.long().squeeze(-1).view(-1)  # [b*s]
+
+        # Optional: shift indices if your labels start at non-zero
+        # min_val = 6
+        # y_true = y_true - min_val
+
         return F.cross_entropy(y_pred, y_true)

@@ -6,5 +6,5 @@ from ModelTypes.ais_dataset_raw import AISDatasetRaw
 
 class IModelDataUploadHandler(ABC):
     @abstractmethod
-    def upload_image(self, dataset: AISDatasetMasked, start_idx: int, end_idx: int) -> None:
+    def upload_trajectories(self, dataset: AISDatasetMasked, start_idx: int, end_idx: int) -> None:
         pass

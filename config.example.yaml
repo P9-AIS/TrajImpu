@@ -88,8 +88,8 @@ modelDataProcessorCfg:
   output_dir: "Data"
   masking_strategy: "POINT_MISSING"
   masking_percentage: 0.1
+  min_sog: 1
   max_time_gap: 600
-  min_traj_gap_distance_m: 0.0
   max_traj_gap_distance_m: 5000.0
 
 modelTrainerCfg:

@@ -146,10 +146,7 @@ class DiscreteEncoder(nn.Module):
 
     def __init__(self, d_model_E, num_classes):
         super().__init__()
-        self.embedding = nn.Embedding(num_classes + 1, d_model_E, padding_idx=num_classes)
-
-        with torch.no_grad():
-            self.embedding.weight[num_classes].zero_()
+        self.embedding = nn.Embedding(num_classes, d_model_E)
 
     def forward(self, x):
         x = x.long().squeeze(-1)  # [b, s]
@@ -173,7 +170,7 @@ class HeterogeneousAttributeEncoder(nn.Module):
         self.sog_continuous_encoder = ContinuousEncoderTwo(feature_dim)
         self.rot_continuous_encoder = ContinuousEncoderTwo(feature_dim)
         self.vessel_type_discrete_encoder = DiscreteEncoder(
-            feature_dim, num_classes=max(int(t) for t in stats.vessel_types))
+            feature_dim, num_classes=len(stats.vessel_types))
 
         self.output_dim = (len(AISColDict) * feature_dim)
         self.latitude_col_idx = AISColDict.LATITUDE.value
