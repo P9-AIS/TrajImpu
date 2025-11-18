@@ -9,66 +9,59 @@ from ModelTypes.ais_stats import AISStats
 
 class CoordinateEncoder(nn.Module):
     """
-    Spatial Coordinate Encoder using hybrid spherical-harmonic encoding.
-    Inputs: lon (longitude) and lat (latitude) with shape [b, s, 1].
-    Outputs: Encoded features with shape [b, s, 2, f], where f = d_model_E.
+    Encode latitude and longitude into a latent feature vector.
+    Handles missing values.
     """
 
-    def __init__(self, d_model_E):
+    def __init__(self, d_model):
         super().__init__()
-        self.d_model_E = d_model_E
-
-       # Learnable affine transformation parameters for each dimension
-        self.linear_lon = nn.Linear(9, d_model_E)  # For longitude
-        self.linear_lat = nn.Linear(9, d_model_E)  # For latitude
-        self.activation = nn.Tanh()  # Hyperbolic tangent activation function
-
-        # Initialize weights and biases using Xavier initialization
-        nn.init.xavier_uniform_(self.linear_lon.weight)
-        nn.init.zeros_(self.linear_lon.bias)
-        nn.init.xavier_uniform_(self.linear_lat.weight)
-        nn.init.zeros_(self.linear_lat.bias)
+        self.d_model = d_model
+        # small MLP for angular embedding
+        self.mlp_lat = nn.Sequential(
+            nn.Linear(2, d_model),
+            nn.ReLU(),
+            nn.Linear(d_model, d_model)
+        )
+        self.mlp_lon = nn.Sequential(
+            nn.Linear(2, d_model),
+            nn.ReLU(),
+            nn.Linear(d_model, d_model)
+        )
 
     def forward(self, lon, lat):
         """
-        Args:
-            lon (torch.Tensor): Longitude tensor of shape [b, s, 1] (in degrees).
-            lat (torch.Tensor): Latitude tensor of shape [b, s, 1] (in degrees).
-        Returns:
-            torch.Tensor: Encoded features of shape [b, s, 2, f], where f = d_model_E.
+        lon, lat: [b, s, 1] in degrees
+        returns: [b, s, d_model]
         """
-        lon_missing_mask = torch.isclose(lon, torch.tensor(181.0, dtype=torch.float32), atol=1e-5)  # [b, s, 1]
-        lat_missing_mask = torch.isclose(lat, torch.tensor(91.0, dtype=torch.float32), atol=1e-5)  # [b, s, 1]
-        # Convert degrees to radians
-        lon_rad = torch.deg2rad(lon)  # Shape [b, s, 1]
-        lat_rad = torch.deg2rad(lat)  # Shape [b, s, 1]
+        # missing values mask
+        lon_mask = (lon == 181.0)
+        lat_mask = (lat == 91.0)
 
-        # Compute the hybrid spherical-harmonic feature vector
-        sin_lon = torch.sin(lon_rad)
-        cos_lon = torch.cos(lon_rad)
-        sin_lat = torch.sin(lat_rad)
-        cos_lat = torch.cos(lat_rad)
+        # convert degrees → radians
+        lon_rad = torch.deg2rad(lon)
+        lat_rad = torch.deg2rad(lat)
 
-        # Feature vector components
-        f1 = sin_lon * cos_lat  # sin(λ)cos(φ)
-        f2 = cos_lon * cos_lat  # cos(λ)cos(φ)
-        f3 = sin_lat            # sin(φ)
-        f4 = torch.sin(2 * lon_rad) * cos_lat  # sin(2λ)cos(φ)
-        f5 = torch.cos(2 * lon_rad) * cos_lat  # cos(2λ)cos(φ)
+        # sin/cos embedding
+        lat_features = torch.cat([
+            torch.sin(lat_rad),
+            torch.cos(lat_rad)
+        ], dim=-1)  # [b, s, 2]
 
-        # Combine into a single feature vector [b, s, 9]
-        features = torch.cat([sin_lon, cos_lon, sin_lat, cos_lat, f1, f2, f3, f4, f5], dim=-1)  # Shape [b, s, 9]
+        lon_features = torch.cat([
+            torch.sin(lon_rad),
+            torch.cos(lon_rad)
+        ], dim=-1)  # [b, s, 2]
 
-        # Apply learnable affine transformations and activation for each dimension
-        encoded_lon = self.activation(self.linear_lon(features))  # Shape [b, s, d_model_E]
-        encoded_lat = self.activation(self.linear_lat(features))  # Shape [b, s, d_model_E]
-        encoded_lon = encoded_lon.masked_fill(lon_missing_mask.expand_as(encoded_lon), 0.0)
-        encoded_lat = encoded_lat.masked_fill(lat_missing_mask.expand_as(encoded_lat), 0.0)
+        encoded_lat = self.mlp_lat(lat_features)  # [b, s, d_model]
+        encoded_lon = self.mlp_lon(lon_features)  # [b, s, d_model]
 
-        # Stack the encoded features along the feature dimension
-        output = torch.stack([encoded_lat, encoded_lon], dim=2)  # Shape [b, s, 2, d_model_E]
+        # zero out missing positions
+        encoded_lat = encoded_lat.masked_fill(lat_mask, 0.0).unsqueeze(2)
+        encoded_lon = encoded_lon.masked_fill(lon_mask, 0.0).unsqueeze(2)
 
-        return output
+        encoded = torch.cat([encoded_lon, encoded_lat], dim=2)
+
+        return encoded
 
 
 class CyclicalEncoder(nn.Module):
@@ -129,7 +122,7 @@ class ContinuousEncoderTwo(nn.Module):
         missing_mask = torch.eq(x, -1)  # [b, s, 1]
 
         denominator = torch.clamp(max_val - min_val, min=1e-6)
-        x_norm = (x - min_val) / denominator
+        x_norm = 2 * (x - min_val) / denominator - 1
 
         batch_size, seq_len, _ = x_norm.shape
 
@@ -156,12 +149,9 @@ class DiscreteEncoder(nn.Module):
 
 class HeterogeneousAttributeEncoder(nn.Module):
 
-    def __init__(self, feature_dim,
-                 stats: AISStats,
-                 max_delta: float):
+    def __init__(self, feature_dim, stats: AISStats):
         super().__init__()
         self.stats = stats
-        self.max_delta = max_delta
 
         self.coordinate_encoder = CoordinateEncoder(feature_dim)
         self.cog_cyclical_encoder = CyclicalEncoder(feature_dim)
@@ -222,9 +212,9 @@ class HeterogeneousAttributeEncoder(nn.Module):
             max_val=rot_max_matrix)
 
         output = torch.cat((spatial_output,
-                            cog_output, heading_angle_output,
-                            draught_output, sog_output, rot_output,
-                            vessel_type_output),
+                            rot_output, sog_output, cog_output, heading_angle_output,
+                            vessel_type_output, draught_output
+                            ),
                            dim=2)  # shape [b, s, len(AISColDict), feature_dim]
 
         output = output.view(b, s, -1)  # shape [b, s, len(AISColDict)*feature_dim]

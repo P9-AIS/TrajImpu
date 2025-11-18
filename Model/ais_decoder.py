@@ -7,35 +7,35 @@ from ModelTypes.ais_col_dict import AISColDict
 from ModelTypes.ais_stats import AISStats
 
 
-class SpatioDecoder(nn.Module):
+class CoordinateDecoder(nn.Module):
     def __init__(self, feature_dim):
-        super(SpatioDecoder, self).__init__()
+        super(CoordinateDecoder, self).__init__()
 
         af = feature_dim // len(AISColDict)
 
         self.lat_mlp = nn.Sequential(
-            nn.Linear(af, 1),
-            nn.Tanh(),
+            nn.Linear(af, af),
+            nn.ReLU(),
+            nn.Linear(af, 1)  # predicts lat_hat, lon_hat in degrees
         )
+
         self.lon_mlp = nn.Sequential(
-            nn.Linear(af, 1),
-            nn.Tanh(),
+            nn.Linear(af, af),
+            nn.ReLU(),
+            nn.Linear(af, 1)  # predicts lat_hat, lon_hat in degrees
         )
 
     def forward(self, e_lat, e_lon):
-        b, s, f = e_lat.shape
-        e_lat_flat = e_lat.view(b*s, f)
-        e_lon_flat = e_lon.view(b*s, f)
 
-        # Predict normalized values in [-1, 1]
-        lat_norm = self.lat_mlp(e_lat_flat)    # [b*s, 1]
-        lon_norm = self.lon_mlp(e_lon_flat)    # [b*s, 1]
+        # raw outputs in range ~(-∞, ∞)
+        lat_norm = self.lat_mlp(e_lat)   # [B, S, 1]
+        lon_norm = self.lon_mlp(e_lon)   # [B, S, 1]
 
-        # Map back to real coordinate ranges
-        lat_hat = lat_norm * 90.0              # [-90, 90]
-        lon_hat = lon_norm * 180.0             # [-180, 180]
+        # map to real coordinate ranges
+        lat_hat = torch.tanh(lat_norm) * 90.0    # [-90, +90]
+        lon_hat = torch.tanh(lon_norm) * 180.0   # [-180, +180]
 
-        return lat_hat, lon_hat
+        return lon_hat, lat_hat
 
 
 class CyclicalDecoder(nn.Module):
@@ -54,45 +54,41 @@ class CyclicalDecoder(nn.Module):
 
         # MLP with custom activation to generate trigonometric components
         self.mlp_phi = nn.Sequential(
-            nn.Linear(af, 1),
+            nn.Linear(af, 2),
             nn.Tanh(),
         )
 
     def forward(self, e_xk):
-        """
-         Forward pass for cyclical decoding.
-         Parameters:
-         - e_xk: Input embedding, shape [b*s, 1, f].
-         Returns:
-         - hat_theta: Reconstructed angular value, shape [b*s, 2].
-        """
+        b, s, _ = e_xk.shape
         e_xk_flat = e_xk.squeeze(1)  # [b*s, f]
-        h_theta = self.mlp_phi(e_xk_flat)  # [b*s, 2]
-        return h_theta
+        h_theta = self.mlp_phi(e_xk_flat)  # [b, s, 2]
+
+        hat_theta = torch.atan2(h_theta[:, :, 0], h_theta[:, :, 1])  # radians
+        hat_theta_deg = (torch.rad2deg(hat_theta) % 360)
+        hat_theta_deg = hat_theta_deg.view(b, s, 1)
+
+        return hat_theta_deg
 
 
 class ContinuousDecoderTwo(nn.Module):
     def __init__(self, feature_dim):
         super().__init__()
-        # MLP to generate h_n ∈ R
+        af = feature_dim // len(AISColDict)  # make sure this matches encoder output
 
-        af = feature_dim // len(AISColDict)
-
-        self.mlp = nn.Sequential(
-            nn.Linear(af, 1, bias=False),
-            nn.Tanh(),
-        )
+        self.mlp = nn.Linear(af, 1)  # linear layer only, no Tanh
 
     def forward(self, e_xk, min_val, max_val):
-        h_n = self.mlp(e_xk.squeeze(1))  # [b*s, 1]
+        h_n = self.mlp(e_xk.squeeze(1))  # [B*S, 1]
 
         delta_range = max_val - min_val
+        safe_denominator = torch.clamp(delta_range, min=1e-6)
 
-        safe_denominator = torch.clamp(delta_range, min=1e-6)  # Prevent negative/zero std deviation
+        # Correct inverse normalization
+        x_hat = (h_n + 1) / 2 * safe_denominator + min_val  # map [-1,1] → [min,max]
 
-        x_hat = h_n * safe_denominator + min_val  # [b*s, n]
-
+        # Clamp to ensure range safety
         x_hat = torch.clamp(x_hat, min=min_val, max=max_val)
+
         return x_hat
 
 
@@ -170,20 +166,16 @@ class HeterogeneousAttributeDecoder(nn.Module):
                  feature_dim,
                  stats: AISStats,
                  output_dim,
-                 max_delta=300.0,
                  ):
         super().__init__()
 
         self.stats = stats
-        self.max_delta = max_delta
 
-        self.spatio_decoder = SpatioDecoder(feature_dim)
+        self.spatio_decoder = CoordinateDecoder(feature_dim)
 
         self.cog_cyclical_decoder = CyclicalDecoder(feature_dim)
         self.heading_cyclical_decoder = CyclicalDecoder(feature_dim)
 
-        self.vessel_width_continuous_decoder = ContinuousDecoderTwo(feature_dim)
-        self.vessel_length_continuous_decoder = ContinuousDecoderTwo(feature_dim)
         self.vessel_draught_continuous_decoder = ContinuousDecoderTwo(feature_dim)
         self.sog_continuous_decoder = ContinuousDecoderTwo(feature_dim)
         self.rot_continuous_decoder = ContinuousDecoderTwo(feature_dim)
@@ -212,12 +204,12 @@ class HeterogeneousAttributeDecoder(nn.Module):
         rot_min = torch.tensor(self.stats.min_rot, device=ais_data.device)
         rot_max = torch.tensor(self.stats.max_rot, device=ais_data.device)
 
-        draught_min_matrix = draught_min.unsqueeze(0).repeat(b*s, 1)  # [b*s, 1]
-        draught_max_matrix = draught_max.unsqueeze(0).repeat(b*s, 1)  # [b*s, 1]
-        sog_min_matrix = sog_min.unsqueeze(0).repeat(b*s, 1)  # [b*s, 1]
-        sog_max_matrix = sog_max.unsqueeze(0).repeat(b*s, 1)  # [b*s, 1]
-        rot_min_matrix = rot_min.unsqueeze(0).repeat(b*s, 1)  # [b*s, 1]
-        rot_max_matrix = rot_max.unsqueeze(0).repeat(b*s, 1)  # [b*s, 1]
+        draught_min_matrix = draught_min.view(1, 1, 1).expand(b, s, 1)
+        draught_max_matrix = draught_max.view(1, 1, 1).expand(b, s, 1)
+        sog_min_matrix = sog_min.view(1, 1, 1).expand(b, s, 1)
+        sog_max_matrix = sog_max.view(1, 1, 1).expand(b, s, 1)
+        rot_min_matrix = rot_min.view(1, 1, 1).expand(b, s, 1)
+        rot_max_matrix = rot_max.view(1, 1, 1).expand(b, s, 1)
 
         lat_hat, lon_hat = self.spatio_decoder(lat_encoding, lon_encoding)
         cog_hat = self.cog_cyclical_decoder(cog_encoding)

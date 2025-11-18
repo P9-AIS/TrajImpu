@@ -17,6 +17,16 @@ class LossOutput:
     rot_loss: torch.Tensor
     vessel_type_loss: torch.Tensor
 
+    def __str__(self) -> str:
+        return (f"Total Loss: {self.total_loss.item():.4f}\n"
+                f"Spatial Loss: {self.spatial_loss.item():.4f}\n"
+                f"COG Loss: {self.cog_loss.item():.4f}\n"
+                f"Heading Loss: {self.heading_loss.item():.4f}\n"
+                f"Draught Loss: {self.draught_loss.item():.4f}\n"
+                f"SOG Loss: {self.sog_loss.item():.4f}\n"
+                f"ROT Loss: {self.rot_loss.item():.4f}\n"
+                f"Vessel Type Loss: {self.vessel_type_loss.item():.4f}")
+
 
 @dataclass
 class Config:
@@ -87,10 +97,10 @@ class LossCalculator:
         return torch.mean(distances)
 
     def _calc_cog_loss(self, imputed_cog: torch.Tensor, ground_truth_cog: torch.Tensor) -> torch.Tensor:
-        return torch.nn.functional.mse_loss(imputed_cog, ground_truth_cog)
+        return self._calc_cyclical_loss(imputed_cog, ground_truth_cog)
 
     def _calc_heading_loss(self, imputed_heading: torch.Tensor, ground_truth_heading: torch.Tensor) -> torch.Tensor:
-        return torch.nn.functional.mse_loss(imputed_heading, ground_truth_heading)
+        return self._calc_cyclical_loss(imputed_heading, ground_truth_heading)
 
     def _calc_draught_loss(self, imputed_draught: torch.Tensor, ground_truth_draught: torch.Tensor) -> torch.Tensor:
         return torch.nn.functional.mse_loss(imputed_draught, ground_truth_draught)
@@ -115,3 +125,8 @@ class LossCalculator:
         # y_true = y_true - min_val
 
         return F.cross_entropy(y_pred, y_true)
+
+    def _calc_cyclical_loss(self, imputed: torch.Tensor, ground_truth: torch.Tensor) -> torch.Tensor:
+        diff = torch.abs(imputed - ground_truth)
+        cyclical_diff = torch.min(diff, 360 - diff)
+        return torch.mean(cyclical_diff)

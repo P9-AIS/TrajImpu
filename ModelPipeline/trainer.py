@@ -24,7 +24,7 @@ class Trainer:
     _optimizer: torch.optim.Optimizer
 
     def __init__(self, model: Model, train_data_loader: DataLoader, validation_data_loader: DataLoader, config: Config):
-        self._writer = SummaryWriter()
+        self._writer = SummaryWriter(flush_secs=1)
         self._cfg = config
         self._train_data_loader = train_data_loader
         self._validation_data_loader = validation_data_loader
@@ -32,6 +32,7 @@ class Trainer:
         self._optimizer = torch.optim.AdamW(self._model.parameters(),
                                             lr=self._cfg.learning_rate,
                                             weight_decay=self._cfg.weight_decay)
+        self._global_step = 0
 
     def train(self):
         print("Training the model...")
@@ -70,14 +71,22 @@ class Trainer:
         with torch.enable_grad():
             for batch_no, batch in enumerate(it, start=1):
                 self._optimizer.zero_grad()
-                loss = self._model.forward(batch).total_loss
-                loss.backward()
+                loss = self._model.forward(batch)
+                loss.total_loss.backward()
                 self._optimizer.step()
+                self._global_step += 1
+                self._writer.add_scalar("loss/train", loss.total_loss.item(), self._global_step)
+                self._writer.add_scalar("loss/train_avg", average_loss, epoch_no)
+                self._writer.add_scalar("loss/train_spatial", loss.spatial_loss.item(), self._global_step)
+                self._writer.add_scalar("loss/train_cog", loss.cog_loss.item(), self._global_step)
+                self._writer.add_scalar("loss/train_sog", loss.sog_loss.item(), self._global_step)
+                self._writer.add_scalar("loss/train_rot", loss.rot_loss.item(), self._global_step)
+                self._writer.add_scalar("loss/train_heading", loss.heading_loss.item(), self._global_step)
+                self._writer.add_scalar("loss/train_draught", loss.draught_loss.item(), self._global_step)
+                self._writer.add_scalar("loss/train_vessel_type", loss.vessel_type_loss.item(), self._global_step)
 
-                self._writer.add_scalar("loss/train", loss.item(), batch_no)
-                total_loss += loss.item()
+                total_loss += loss.total_loss.item()
                 average_loss = total_loss / batch_no
-                print(f"Average Training Loss: {average_loss:.4f}")
 
                 it.set_postfix(
                     ordered_dict={

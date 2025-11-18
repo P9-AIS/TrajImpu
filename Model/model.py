@@ -15,11 +15,10 @@ from ModelUtils.loss_calculator import LossCalculator, LossOutput
 @dataclass
 class Config:
     device: str
+    teacher_forcing_ratio: float = 0.5
 
     # encoder
     dim_ais_attr_encoding: int = 16
-
-    max_delta: float = 0.0
 
     # afa module
     num_layers: int = 2
@@ -38,7 +37,7 @@ class Model(nn.Module):
                  cfg: Config):
         super().__init__()
         self.ais_encoder = HeterogeneousAttributeEncoder(
-            cfg.dim_ais_attr_encoding, dataset_stats, cfg.max_delta).to(cfg.device)
+            cfg.dim_ais_attr_encoding, dataset_stats).to(cfg.device)
 
         self._cfg = cfg
         self.ais_encoding_dim = self.ais_encoder.output_dim
@@ -56,54 +55,71 @@ class Model(nn.Module):
         ais_batch.masks = ais_batch.masks.to(self._cfg.device)
 
         encoded = self.ais_encoder(ais_batch.observed_data)
-        features, _ = self.afa_module(ais_batch.observed_data, encoded)
+        decoded, extra = self.ais_decoder(encoded)
 
-        fine_masks = torch.repeat_interleave(ais_batch.masks, self._cfg.dim_ais_attr_encoding, dim=2).detach()
+        loss = self.loss_calculator.calculate_loss(
+            decoded, [extra], ais_batch.observed_data
+        )
+
+        # features, _ = self.afa_module(ais_batch.observed_data, encoded)
+
+        # fine_masks = torch.repeat_interleave(ais_batch.masks, self._cfg.dim_ais_attr_encoding, dim=2).detach()
         # current_masks = fine_masks.clone().detach()
 
-        all_imputed: list[torch.Tensor] = []
-        all_imputed_extra: list[ExtraDecodeOutput] = []
-        all_imputed_truth: list[torch.Tensor] = []
+        # all_imputed: list[torch.Tensor] = []
+        # all_imputed_extra: list[ExtraDecodeOutput] = []
+        # all_imputed_truth: list[torch.Tensor] = []
 
-        features = features.contiguous()
+        # features = features.contiguous()
 
-        for _ in range(ais_batch.num_missing_values):
-            features = features.detach()
-            # detach features so each step does not backprop through the previous one
-            brits_data = _prepare_brits_data(
-                ais_batch.observed_data, features, fine_masks
-            )
+        # for _ in range(ais_batch.num_missing_values):
+        #     features = features.detach()
+        #     # detach features so each step does not backprop through the previous one
+        #     brits_data = _prepare_brits_data(
+        #         ais_batch.observed_data, features, fine_masks
+        #     )
 
-            imputed = self.impu_module(brits_data, stage="test")["imputed_data"]
+        #     imputed = self.impu_module(brits_data, stage="test")["imputed_data"]
 
-            # Find first missing value per batch
-            first_mask_idx = (fine_masks == 0).any(dim=2).float().argmax(dim=1)
-            batch_idx = torch.arange(imputed.size(0), device=imputed.device)
+        #     # Find first missing value per batch
+        #     first_mask_idx = (fine_masks == 0).any(dim=2).float().argmax(dim=1)
+        #     batch_idx = torch.arange(imputed.size(0), device=imputed.device)
 
-            first_imputed = imputed[batch_idx, first_mask_idx, :]
-            first_imputed_truth = ais_batch.observed_data[batch_idx, first_mask_idx, :]
+        #     first_imputed = imputed[batch_idx, first_mask_idx, :]
+        #     first_encoded = encoded[batch_idx, first_mask_idx, :]
+        #     first_truth = ais_batch.observed_data[batch_idx, first_mask_idx, :]  # [b, f]
 
-            # Decode -> enrich -> re-encode
-            first_decoded, extra = self.ais_decoder(first_imputed.unsqueeze(1))
-            first_encoded = self.ais_encoder(first_decoded)
-            first_features, _ = self.afa_module(first_decoded, first_encoded)
+        #     if self.training:  # only apply during training
+        #         tf_mask = (torch.rand(batch_idx.size(0), device=first_imputed.device)
+        #                    < self._cfg.teacher_forcing_ratio).float().unsqueeze(-1)  # [b, 1]
 
-            # Scatter features (no gradient through previous steps)
-            scatter_index = first_mask_idx.view(-1, 1, 1).expand(-1, 1, features.size(2))
-            features = features.scatter(1, scatter_index, first_features)
-            fine_masks = fine_masks.scatter(1, scatter_index, 1).detach()
+        #         # mix predicted and true values
+        #         #   X_tf = p * truth + (1-p) * prediction
+        #         first_input = tf_mask * first_encoded + (1 - tf_mask) * first_imputed
+        #     else:
+        #         first_input = first_imputed
 
-            all_imputed.append(first_decoded.detach())  # detach to save memory
-            all_imputed_extra.append(extra)
-            all_imputed_truth.append(first_imputed_truth.unsqueeze(1))
+        #     # Decode -> enrich -> re-encode
+        #     first_decoded, extra = self.ais_decoder(first_input.unsqueeze(1))
+        #     first_encoded = self.ais_encoder(first_decoded)
+        #     first_features, _ = self.afa_module(first_decoded, first_encoded)
 
-        all_imputed_tensor = torch.cat(all_imputed, dim=1)
-        all_imputed_truth_tensor = torch.cat(all_imputed_truth, dim=1)
+        #     # Scatter features (no gradient through previous steps)
+        #     scatter_index = first_mask_idx.view(-1, 1, 1).expand(-1, 1, features.size(2))
+        #     features = features.scatter(1, scatter_index, first_features)
+        #     fine_masks = fine_masks.scatter(1, scatter_index, 1).detach()
+
+        #     all_imputed.append(first_decoded.detach())  # detach to save memory
+        #     all_imputed_extra.append(extra)
+        #     all_imputed_truth.append(first_truth.unsqueeze(1))
+
+        # all_imputed_tensor = torch.cat(all_imputed, dim=1)
+        # all_imputed_truth_tensor = torch.cat(all_imputed_truth, dim=1)
 
         # Compute loss normally
-        loss = self.loss_calculator.calculate_loss(
-            all_imputed_tensor, all_imputed_extra, all_imputed_truth_tensor
-        )
+        # loss = self.loss_calculator.calculate_loss(
+        #     all_imputed_tensor, all_imputed_extra, all_imputed_truth_tensor
+        # )
 
         return loss
 
