@@ -28,13 +28,10 @@ class CyclicalDecoder(nn.Module):
         )
 
     def forward(self, e_xk):
-        b, s, _ = e_xk.shape
-        e_xk_flat = e_xk.squeeze(1)  # [b*s, f]
-        h_theta = self.mlp_phi(e_xk_flat)  # [b, s, 2]
+        h_theta = self.mlp_phi(e_xk)  # [b, s, 2]
 
-        hat_theta = torch.atan2(h_theta[:, :, 0], h_theta[:, :, 1])  # radians
+        hat_theta = torch.atan2(h_theta[:, :, 0], h_theta[:, :, 1]).unsqueeze(-1)  # radians
         hat_theta_deg = (torch.rad2deg(hat_theta) % 360)
-        hat_theta_deg = hat_theta_deg.view(b, s, 1)
 
         return hat_theta_deg
 
@@ -47,7 +44,7 @@ class ContinuousDecoderTwo(nn.Module):
         self.mlp = nn.Linear(af, 1)  # linear layer only, no Tanh
 
     def forward(self, e_xk, min_val, max_val):
-        h_n = self.mlp(e_xk.squeeze(1))  # [B*S, 1]
+        h_n = self.mlp(e_xk)  # [b*s, 1, 1]
 
         delta_range = max_val - min_val
         safe_denominator = torch.clamp(delta_range, min=1e-6)
@@ -58,7 +55,7 @@ class ContinuousDecoderTwo(nn.Module):
         # Clamp to ensure range safety
         x_hat = torch.clamp(x_hat, min=min_val, max=max_val)
 
-        return x_hat
+        return x_hat  # [b, s, 1]
 
 
 class DiscreteDecoder(nn.Module):
@@ -103,13 +100,13 @@ class DiscreteDecoder(nn.Module):
         - hat_y: Class probability distribution, shape [b*s, |C|].
         """
         # Step 1: Generate intermediate representation \mathbf{z}
-        z = self.mlp(e_xk.squeeze(1))  # [b*s, d]
+        z = self.mlp(e_xk)  # [b, s, d]
 
         # Step 2: Compute similarity scores with class prototypes
-        logits = torch.matmul(z, self.class_prototypes.weight) / self.temperature  # [b*s, |C|]
+        logits = torch.matmul(z, self.class_prototypes.weight) / self.temperature  # [b, s, |C|]
 
         # Step 3: Apply softmax to compute class probabilities
-        s = F.softmax(logits, dim=-1)  # [b*s, |C|]
+        s = F.softmax(logits, dim=-1)  # [b, s, |C|]
 
         # # Step 4: Hierarchical label smoothing
         uniform_dist = torch.full_like(s, 1.0 / s.size(-1))  # Uniform distribution [|C|]
@@ -121,7 +118,7 @@ class DiscreteDecoder(nn.Module):
         assert not torch.isnan(dist_y).any(), "discrete_decoder-hat_y contains NaN values"
         assert not torch.isinf(dist_y).any(), "discrete_decoder-hat_y contains Inf values"
 
-        # [b*s, |C|] #[b*s, d], [b*s, d]
+        # [b, s, 1], [b, s, |C|]
         return vessel_type_hat, logits
 
 
@@ -201,10 +198,10 @@ class HeterogeneousAttributeDecoder(nn.Module):
 
         output = torch.cat([
             lat_hat, lon_hat, rot_hat, sog_hat, cog_hat, heading_hat, vessel_type_hat, draught_hat
-        ], dim=-1).view(b, s, -1)  # [b, s, num_ais_attr]
+        ], dim=-1)  # [b, s, num_ais_attr]
 
         extra = ExtraDecodeOutput(
-            vessel_type_prob_logits=prob_dist.view(b, s, -1)
+            vessel_type_prob_logits=prob_dist
         )
 
         return output, extra
