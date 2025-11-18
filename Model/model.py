@@ -34,7 +34,8 @@ class Config:
 
 
 class Model(nn.Module):
-    def __init__(self, dataset_stats: AISStats, force_providers: list[IForceProvider], loss_calculator: LossCalculator, cfg: Config):
+    def __init__(self, dataset_stats: AISStats, force_providers: list[IForceProvider], loss_calculator: LossCalculator,
+                 cfg: Config):
         super().__init__()
         self.ais_encoder = HeterogeneousAttributeEncoder(
             cfg.dim_ais_attr_encoding, dataset_stats, cfg.max_delta).to(cfg.device)
@@ -57,7 +58,7 @@ class Model(nn.Module):
         encoded = self.ais_encoder(ais_batch.observed_data)
         features, _ = self.afa_module(ais_batch.observed_data, encoded)
 
-        current_masks = torch.repeat_interleave(ais_batch.masks, self._cfg.dim_ais_attr_encoding, dim=2).detach()
+        fine_masks = torch.repeat_interleave(ais_batch.masks, self._cfg.dim_ais_attr_encoding, dim=2).detach()
         # current_masks = fine_masks.clone().detach()
 
         all_imputed: list[torch.Tensor] = []
@@ -67,68 +68,72 @@ class Model(nn.Module):
         features = features.contiguous()
 
         for _ in range(ais_batch.num_missing_values):
-            brits_data = _prepare_brits_data(ais_batch.observed_data, features, current_masks)
+            features = features.detach()
+            # detach features so each step does not backprop through the previous one
+            brits_data = _prepare_brits_data(
+                ais_batch.observed_data, features, fine_masks
+            )
 
-            imputed = self.impu_module(brits_data, stage="test")["imputed_data"]  # [b, s, feat_dim]
+            imputed = self.impu_module(brits_data, stage="test")["imputed_data"]
 
-            # Select index of first missing value per batch
-            first_mask_idx = (current_masks == 0).any(dim=2).float().argmax(dim=1)  # [b]
+            # Find first missing value per batch
+            first_mask_idx = (fine_masks == 0).any(dim=2).float().argmax(dim=1)
             batch_idx = torch.arange(imputed.size(0), device=imputed.device)
 
-            first_imputed = imputed[batch_idx, first_mask_idx, :]                  # [b, feat_dim]
-            first_imputed_truth = ais_batch.observed_data[batch_idx, first_mask_idx, :]  # [b, num_ais_attr]
+            first_imputed = imputed[batch_idx, first_mask_idx, :]
+            first_imputed_truth = ais_batch.observed_data[batch_idx, first_mask_idx, :]
 
             # Decode -> enrich -> re-encode
-            first_decoded, extra = self.ais_decoder(first_imputed.unsqueeze(1))           # [b, 1, num_ais_attr]
-            first_encoded = self.ais_encoder(first_decoded)                        # [b, 1, feat_dim]
-            first_features, _ = self.afa_module(first_decoded, first_encoded)      # [b, 1, feat_dim]
+            first_decoded, extra = self.ais_decoder(first_imputed.unsqueeze(1))
+            first_encoded = self.ais_encoder(first_decoded)
+            first_features, _ = self.afa_module(first_decoded, first_encoded)
 
-            # Replace feature at that timestep in a differentiable way
+            # Scatter features (no gradient through previous steps)
             scatter_index = first_mask_idx.view(-1, 1, 1).expand(-1, 1, features.size(2))
-            # features = features.clone()
-            # features.scatter_(1, scatter_index, first_features)
             features = features.scatter(1, scatter_index, first_features)
-            current_masks = current_masks.scatter(1, scatter_index, 1).detach()
+            fine_masks = fine_masks.scatter(1, scatter_index, 1).detach()
 
-            # Mark mask as filled
-            # current_masks = current_masks.clone()
-            # current_masks[batch_idx, first_mask_idx, :] = 1
-
-            all_imputed.append(first_decoded)
+            all_imputed.append(first_decoded.detach())  # detach to save memory
             all_imputed_extra.append(extra)
             all_imputed_truth.append(first_imputed_truth.unsqueeze(1))
 
-        all_imputed_tensor = torch.cat(all_imputed, dim=1)  # [b, s, num_ais_attr]
-        all_imputed_truth_tensor = torch.cat(all_imputed_truth, dim=1)  # [b, s, num_ais_attr]
+        all_imputed_tensor = torch.cat(all_imputed, dim=1)
+        all_imputed_truth_tensor = torch.cat(all_imputed_truth, dim=1)
 
-        print("Calculating loss...")
-        loss = self.loss_calculator.calculate_loss(all_imputed_tensor, all_imputed_extra, all_imputed_truth_tensor)
-        print("Total Loss:", loss.total_loss.item())
+        # Compute loss normally
+        loss = self.loss_calculator.calculate_loss(
+            all_imputed_tensor, all_imputed_extra, all_imputed_truth_tensor
+        )
 
         return loss
 
 
 def _prepare_brits_data(ais_data, encoded_data, masks):
+    encoded_data = encoded_data.detach()
+    masks = masks.detach()
+    ais_data = ais_data.detach()
+
     b, s, f = encoded_data.size()
     delta_data = torch.zeros((b, s, f), device=encoded_data.device)
 
     for t in range(1, s):
         time_gap = (ais_data[:, t, 0] - ais_data[:, t - 1, 0]).unsqueeze(-1)  # [b, 1]
         previous_mask = masks[:, t - 1, :]  # [b, f]
-        reset_deltas = time_gap * previous_mask  # [b, f]
-        accumulated_deltas = (time_gap + delta_data[:, t - 1, :]) * (1 - previous_mask)  # [b, f]
+        reset_deltas = time_gap * previous_mask
+        accumulated_deltas = (time_gap + delta_data[:, t - 1, :]) * (1 - previous_mask)
+
         delta_data[:, t, :] = reset_deltas + accumulated_deltas
 
     data = {
         "forward": {
-            "X": encoded_data,
-            "missing_mask": masks,
-            "deltas": delta_data,
+            "X": encoded_data.detach(),
+            "missing_mask": masks.detach(),
+            "deltas": delta_data.detach(),
         },
         "backward": {
-            "X": torch.flip(encoded_data, [1]),
-            "missing_mask": torch.flip(masks, [1]),
-            "deltas": torch.flip(delta_data, [1]),
+            "X": torch.flip(encoded_data, [1]).detach(),
+            "missing_mask": torch.flip(masks, [1]).detach(),
+            "deltas": torch.flip(delta_data, [1]).detach(),
         },
     }
     return data
