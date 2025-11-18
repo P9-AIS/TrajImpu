@@ -7,63 +7,6 @@ from ModelTypes.ais_dataset_masked import AISBatch
 from ModelTypes.ais_stats import AISStats
 
 
-class CoordinateEncoder(nn.Module):
-    """
-    Encode latitude and longitude into a latent feature vector.
-    Handles missing values.
-    """
-
-    def __init__(self, d_model):
-        super().__init__()
-        self.d_model = d_model
-        # small MLP for angular embedding
-        self.mlp_lat = nn.Sequential(
-            nn.Linear(2, d_model),
-            nn.ReLU(),
-            nn.Linear(d_model, d_model)
-        )
-        self.mlp_lon = nn.Sequential(
-            nn.Linear(2, d_model),
-            nn.ReLU(),
-            nn.Linear(d_model, d_model)
-        )
-
-    def forward(self, lon, lat):
-        """
-        lon, lat: [b, s, 1] in degrees
-        returns: [b, s, d_model]
-        """
-        # missing values mask
-        lon_mask = (lon == 181.0)
-        lat_mask = (lat == 91.0)
-
-        # convert degrees → radians
-        lon_rad = torch.deg2rad(lon)
-        lat_rad = torch.deg2rad(lat)
-
-        # sin/cos embedding
-        lat_features = torch.cat([
-            torch.sin(lat_rad),
-            torch.cos(lat_rad)
-        ], dim=-1)  # [b, s, 2]
-
-        lon_features = torch.cat([
-            torch.sin(lon_rad),
-            torch.cos(lon_rad)
-        ], dim=-1)  # [b, s, 2]
-
-        encoded_lat = self.mlp_lat(lat_features)  # [b, s, d_model]
-        encoded_lon = self.mlp_lon(lon_features)  # [b, s, d_model]
-
-        # zero out missing positions
-        encoded_lat = encoded_lat.masked_fill(lat_mask, 0.0).unsqueeze(2)
-        encoded_lon = encoded_lon.masked_fill(lon_mask, 0.0).unsqueeze(2)
-
-        encoded = torch.cat([encoded_lon, encoded_lat], dim=2)
-
-        return encoded
-
-
 class CyclicalEncoder(nn.Module):
     """
     Cyclical Encoder for attributes with physical periodicity (e.g., heading angle or course over ground).
@@ -153,7 +96,8 @@ class HeterogeneousAttributeEncoder(nn.Module):
         super().__init__()
         self.stats = stats
 
-        self.coordinate_encoder = CoordinateEncoder(feature_dim)
+        self.lat_continous_encoder = ContinuousEncoderTwo(feature_dim)
+        self.lon_continous_encoder = ContinuousEncoderTwo(feature_dim)
         self.cog_cyclical_encoder = CyclicalEncoder(feature_dim)
         self.heading_angle_cyclical_encoder = CyclicalEncoder(feature_dim)
         self.vessel_draught_continuous_encoder = ContinuousEncoderTwo(feature_dim)
@@ -169,12 +113,21 @@ class HeterogeneousAttributeEncoder(nn.Module):
         tensor_input = ais_data
         b, s, _ = ais_data.shape  # [b, s, n]
 
+        lat_min = torch.tensor(self.stats.min_lat, device=tensor_input.device)
+        lat_max = torch.tensor(self.stats.max_lat, device=tensor_input.device)
+        lon_min = torch.tensor(self.stats.min_lon, device=tensor_input.device)
+        lon_max = torch.tensor(self.stats.max_lon, device=tensor_input.device)
         draught_min = torch.tensor(self.stats.min_draught, device=tensor_input.device)
         draught_max = torch.tensor(self.stats.max_draught, device=tensor_input.device)
         sog_min = torch.tensor(self.stats.min_sog, device=tensor_input.device)
         sog_max = torch.tensor(self.stats.max_sog, device=tensor_input.device)
         rot_min = torch.tensor(self.stats.min_rot, device=tensor_input.device)
         rot_max = torch.tensor(self.stats.max_rot, device=tensor_input.device)
+
+        lat_min_matrix = lat_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
+        lat_max_matrix = lat_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
+        lon_min_matrix = lon_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
+        lon_max_matrix = lon_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)
         draught_min_matrix = draught_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
         draught_max_matrix = draught_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
         sog_min_matrix = sog_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
@@ -182,10 +135,13 @@ class HeterogeneousAttributeEncoder(nn.Module):
         rot_min_matrix = rot_min.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
         rot_max_matrix = rot_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
 
-        spatial_output = self.coordinate_encoder(
+        lat_output = self.lat_continous_encoder(
+            tensor_input[:, :, AISColDict.LATITUDE.value:AISColDict.LATITUDE.value+1],
+            lat_min_matrix, lat_max_matrix)
+
+        lon_output = self.lon_continous_encoder(
             tensor_input[:, :, AISColDict.LONGITUDE.value:AISColDict.LONGITUDE.value+1],
-            tensor_input[:, :, AISColDict.LATITUDE.value:AISColDict.LATITUDE.value+1]
-        )
+            lon_min_matrix, lon_max_matrix)
 
         cog_output = self.cog_cyclical_encoder(
             tensor_input[:, :, AISColDict.COG.value:AISColDict.COG.value+1])
@@ -211,7 +167,7 @@ class HeterogeneousAttributeEncoder(nn.Module):
             min_val=rot_min_matrix,
             max_val=rot_max_matrix)
 
-        output = torch.cat((spatial_output,
+        output = torch.cat((lat_output, lon_output,
                             rot_output, sog_output, cog_output, heading_angle_output,
                             vessel_type_output, draught_output
                             ),

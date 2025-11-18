@@ -9,23 +9,27 @@ import torch.nn.functional as F
 @dataclass
 class LossOutput:
     total_loss: torch.Tensor
-    spatial_loss: torch.Tensor
+    lat_loss: torch.Tensor
+    lon_loss: torch.Tensor
     cog_loss: torch.Tensor
     heading_loss: torch.Tensor
     draught_loss: torch.Tensor
     sog_loss: torch.Tensor
     rot_loss: torch.Tensor
     vessel_type_loss: torch.Tensor
+    haversine_loss: torch.Tensor
 
     def __str__(self) -> str:
         return (f"Total Loss: {self.total_loss.item():.4f}\n"
-                f"Spatial Loss: {self.spatial_loss.item():.4f}\n"
+                f"Lat Loss: {self.lat_loss.item():.4f}\n"
+                f"Lon Loss: {self.lon_loss.item():.4f}\n"
                 f"COG Loss: {self.cog_loss.item():.4f}\n"
                 f"Heading Loss: {self.heading_loss.item():.4f}\n"
                 f"Draught Loss: {self.draught_loss.item():.4f}\n"
                 f"SOG Loss: {self.sog_loss.item():.4f}\n"
                 f"ROT Loss: {self.rot_loss.item():.4f}\n"
-                f"Vessel Type Loss: {self.vessel_type_loss.item():.4f}")
+                f"Vessel Type Loss: {self.vessel_type_loss.item():.4f}\n"
+                f"Haversine Loss: {self.haversine_loss.item():.4f}")
 
 
 @dataclass
@@ -47,10 +51,14 @@ class LossCalculator:
         self._config = config
 
     def calculate_loss(self, imputed: torch.Tensor, imputed_extra: list[ExtraDecodeOutput], ground_truth: torch.Tensor) -> LossOutput:
-        spatial_loss = self._calc_spatial_loss(
-            imputed[:, :, :AISColDict.LONGITUDE.value+AISColDict.LATITUDE.value+1],
-            ground_truth[:, :, :AISColDict.LONGITUDE.value+AISColDict.LATITUDE.value+1]
-        ) * self._config.spatial_weight
+        lat_loss = self._calc_lat_loss(
+            imputed[:, :, AISColDict.LATITUDE.value:AISColDict.LATITUDE.value+1],
+            ground_truth[:, :, AISColDict.LATITUDE.value:AISColDict.LATITUDE.value+1]
+        )
+        lon_loss = self._calc_lon_loss(
+            imputed[:, :, AISColDict.LONGITUDE.value:AISColDict.LONGITUDE.value+1],
+            ground_truth[:, :, AISColDict.LONGITUDE.value:AISColDict.LONGITUDE.value+1]
+        )
         cog_loss = self._calc_cog_loss(
             imputed[:, :, AISColDict.COG.value:AISColDict.COG.value+1],
             ground_truth[:, :, AISColDict.COG.value:AISColDict.COG.value+1]
@@ -75,26 +83,43 @@ class LossCalculator:
             imputed_extra,
             ground_truth[:, :, AISColDict.VESSEL_TYPE.value:AISColDict.VESSEL_TYPE.value+1]
         ) * self._config.vessel_type_weight
+        haversine_loss = self._calc_spatial_loss(
+            imputed[:, :, AISColDict.LATITUDE.value:AISColDict.LATITUDE.value+1],
+            ground_truth[:, :, AISColDict.LATITUDE.value:AISColDict.LATITUDE.value+1],
+            imputed[:, :, AISColDict.LONGITUDE.value:AISColDict.LONGITUDE.value+1],
+            ground_truth[:, :, AISColDict.LONGITUDE.value:AISColDict.LONGITUDE.value+1],
+        )
 
-        total_loss = (spatial_loss + cog_loss + heading_loss + draught_loss + sog_loss + rot_loss + vessel_type_loss)
+        total_loss = (lat_loss + lon_loss + cog_loss + heading_loss +
+                      draught_loss + sog_loss + rot_loss + vessel_type_loss)
 
         return LossOutput(
             total_loss=total_loss,
-            spatial_loss=spatial_loss,
+            lat_loss=lat_loss,
+            lon_loss=lon_loss,
             cog_loss=cog_loss,
             heading_loss=heading_loss,
             draught_loss=draught_loss,
             sog_loss=sog_loss,
             rot_loss=rot_loss,
-            vessel_type_loss=vessel_type_loss
+            vessel_type_loss=vessel_type_loss,
+            haversine_loss=haversine_loss
         )
 
-    def _calc_spatial_loss(self, imputed_spatial: torch.Tensor, ground_truth_spatial: torch.Tensor) -> torch.Tensor:
+    def _calc_spatial_loss(self, imputed_lat, ground_truth_lat, imputed_lon, ground_truth_lon) -> torch.Tensor:
+        catted_imputed = torch.cat((imputed_lat, imputed_lon), dim=-1)
+        catted_ground_truth = torch.cat((ground_truth_lat, ground_truth_lon), dim=-1)
         distances = GeoUtils.haversine_distances_m(
-            pos1=imputed_spatial,
-            pos2=ground_truth_spatial
+            pos1=catted_imputed,
+            pos2=catted_ground_truth
         )
         return torch.mean(distances)
+
+    def _calc_lat_loss(self, imputed_lat: torch.Tensor, ground_truth_lat: torch.Tensor) -> torch.Tensor:
+        return torch.nn.functional.mse_loss(imputed_lat, ground_truth_lat)
+
+    def _calc_lon_loss(self, imputed_lon: torch.Tensor, ground_truth_lon: torch.Tensor) -> torch.Tensor:
+        return torch.nn.functional.mse_loss(imputed_lon, ground_truth_lon)
 
     def _calc_cog_loss(self, imputed_cog: torch.Tensor, ground_truth_cog: torch.Tensor) -> torch.Tensor:
         return self._calc_cyclical_loss(imputed_cog, ground_truth_cog)

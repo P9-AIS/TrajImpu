@@ -7,37 +7,6 @@ from ModelTypes.ais_col_dict import AISColDict
 from ModelTypes.ais_stats import AISStats
 
 
-class CoordinateDecoder(nn.Module):
-    def __init__(self, feature_dim):
-        super(CoordinateDecoder, self).__init__()
-
-        af = feature_dim // len(AISColDict)
-
-        self.lat_mlp = nn.Sequential(
-            nn.Linear(af, af),
-            nn.ReLU(),
-            nn.Linear(af, 1)  # predicts lat_hat, lon_hat in degrees
-        )
-
-        self.lon_mlp = nn.Sequential(
-            nn.Linear(af, af),
-            nn.ReLU(),
-            nn.Linear(af, 1)  # predicts lat_hat, lon_hat in degrees
-        )
-
-    def forward(self, e_lat, e_lon):
-
-        # raw outputs in range ~(-∞, ∞)
-        lat_norm = self.lat_mlp(e_lat)   # [B, S, 1]
-        lon_norm = self.lon_mlp(e_lon)   # [B, S, 1]
-
-        # map to real coordinate ranges
-        lat_hat = torch.tanh(lat_norm) * 90.0    # [-90, +90]
-        lon_hat = torch.tanh(lon_norm) * 180.0   # [-180, +180]
-
-        return lon_hat, lat_hat
-
-
 class CyclicalDecoder(nn.Module):
 
     def __init__(self, feature_dim):
@@ -171,7 +140,8 @@ class HeterogeneousAttributeDecoder(nn.Module):
 
         self.stats = stats
 
-        self.spatio_decoder = CoordinateDecoder(feature_dim)
+        self.lat_decoder = ContinuousDecoderTwo(feature_dim)
+        self.lon_decoder = ContinuousDecoderTwo(feature_dim)
 
         self.cog_cyclical_decoder = CyclicalDecoder(feature_dim)
         self.heading_cyclical_decoder = CyclicalDecoder(feature_dim)
@@ -197,6 +167,10 @@ class HeterogeneousAttributeDecoder(nn.Module):
         rot_encoding = ais_data[:, :, AISColDict.ROT.value*af: (AISColDict.ROT.value+1)*af]
         vessel_type_encoding = ais_data[:, :, AISColDict.VESSEL_TYPE.value*af: (AISColDict.VESSEL_TYPE.value+1)*af]
 
+        lat_min = torch.tensor(self.stats.min_lat, device=ais_data.device)
+        lat_max = torch.tensor(self.stats.max_lat, device=ais_data.device)
+        lon_min = torch.tensor(self.stats.min_lon, device=ais_data.device)
+        lon_max = torch.tensor(self.stats.max_lon, device=ais_data.device)
         draught_min = torch.tensor(self.stats.min_draught, device=ais_data.device)
         draught_max = torch.tensor(self.stats.max_draught, device=ais_data.device)
         sog_min = torch.tensor(self.stats.min_sog, device=ais_data.device)
@@ -204,6 +178,10 @@ class HeterogeneousAttributeDecoder(nn.Module):
         rot_min = torch.tensor(self.stats.min_rot, device=ais_data.device)
         rot_max = torch.tensor(self.stats.max_rot, device=ais_data.device)
 
+        lat_min_matrix = lat_min.view(1, 1, 1).expand(b, s, 1)
+        lat_max_matrix = lat_max.view(1, 1, 1).expand(b, s, 1)
+        lon_min_matrix = lon_min.view(1, 1, 1).expand(b, s, 1)
+        lon_max_matrix = lon_max.view(1, 1, 1).expand(b, s, 1)
         draught_min_matrix = draught_min.view(1, 1, 1).expand(b, s, 1)
         draught_max_matrix = draught_max.view(1, 1, 1).expand(b, s, 1)
         sog_min_matrix = sog_min.view(1, 1, 1).expand(b, s, 1)
@@ -211,7 +189,8 @@ class HeterogeneousAttributeDecoder(nn.Module):
         rot_min_matrix = rot_min.view(1, 1, 1).expand(b, s, 1)
         rot_max_matrix = rot_max.view(1, 1, 1).expand(b, s, 1)
 
-        lat_hat, lon_hat = self.spatio_decoder(lat_encoding, lon_encoding)
+        lat_hat = self.lat_decoder(lat_encoding, lat_min_matrix, lat_max_matrix)
+        lon_hat = self.lon_decoder(lon_encoding, lon_min_matrix, lon_max_matrix)
         cog_hat = self.cog_cyclical_decoder(cog_encoding)
         heading_hat = self.heading_cyclical_decoder(heading_encoding)
         draught_hat = self.vessel_draught_continuous_decoder(

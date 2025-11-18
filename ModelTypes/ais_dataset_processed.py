@@ -34,6 +34,8 @@ class AISDatasetProcessed():
         num_trajs = data.shape[0]
         num_records = data.shape[0] * data.shape[1]
 
+        lat_column = data[:, :, AISColDict.LATITUDE.value]
+        lon_column = data[:, :, AISColDict.LONGITUDE.value]
         vessel_type_column = data[:, :, AISColDict.VESSEL_TYPE.value].astype(int)
         draught_column = data[:, :, AISColDict.DRAUGHT.value]
         sog_column = data[:, :, AISColDict.SOG.value]
@@ -41,6 +43,10 @@ class AISDatasetProcessed():
 
         vessel_types_set = set(np.unique(vessel_type_column))
         vessel_type_dict = {idx: VesselType(v_type) for idx, v_type in enumerate(vessel_types_set)}
+        min_lat = np.min(lat_column)
+        max_lat = np.max(lat_column)
+        min_lon = np.min(lon_column)
+        max_lon = np.max(lon_column)
         min_draught = np.min(draught_column)
         max_draught = np.max(draught_column)
         min_sog = np.min(sog_column)
@@ -54,6 +60,10 @@ class AISDatasetProcessed():
             num_records=num_records,
             vessel_types=vessel_types_set,
             vessel_type_dict=vessel_type_dict,
+            min_lat=min_lat,
+            max_lat=max_lat,
+            min_lon=min_lon,
+            max_lon=max_lon,
             min_draught=min_draught,
             max_draught=max_draught,
             min_sog=min_sog,
