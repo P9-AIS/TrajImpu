@@ -73,23 +73,22 @@ class Trainer:
             for batch_no, batch in enumerate(it, start=1):
                 self._optimizer.zero_grad()
                 loss = self._model.forward(batch)
-                loss.total_loss.backward()
+                loss.mse.total_loss.backward()
                 self._optimizer.step()
                 self._global_training_step += 1
-                self._writer.add_scalar("loss/train", loss.total_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_avg", average_loss, epoch_no)
-                self._writer.add_scalar("loss/train_lat", loss.lat_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_lon", loss.lon_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_cog", loss.cog_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_sog", loss.sog_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_rot", loss.rot_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_heading", loss.heading_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_draught", loss.draught_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_vessel_type", loss.vessel_type_loss.item(),
+                self._writer.add_scalar("loss/train", loss.mae.total_loss.item(), self._global_training_step)
+                self._writer.add_scalar("loss/train_avg_mse", average_loss, epoch_no)
+                self._writer.add_scalar("loss/train_lat", loss.mae.lat_loss.item(), self._global_training_step)
+                self._writer.add_scalar("loss/train_lon", loss.mae.lon_loss.item(), self._global_training_step)
+                self._writer.add_scalar("loss/train_cog", loss.mae.cog_loss.item(), self._global_training_step)
+                self._writer.add_scalar("loss/train_sog", loss.mae.sog_loss.item(), self._global_training_step)
+                self._writer.add_scalar("loss/train_rot", loss.mae.rot_loss.item(), self._global_training_step)
+                self._writer.add_scalar("loss/train_heading", loss.mae.heading_loss.item(), self._global_training_step)
+                self._writer.add_scalar("loss/train_draught", loss.mae.draught_loss.item(), self._global_training_step)
+                self._writer.add_scalar("loss/train_vessel_type", loss.mae.vessel_type_loss.item(),
                                         self._global_training_step)
-                self._writer.add_scalar("loss/train_haversine", loss.haversine_loss.item(), self._global_training_step)
 
-                total_loss += loss.total_loss.item()
+                total_loss += loss.mse.total_loss.item()
                 average_loss = total_loss / batch_no
 
                 it.set_postfix(
@@ -112,7 +111,7 @@ class Trainer:
 
         with torch.no_grad():
             for batch_no, batch in enumerate(it, start=1):
-                loss = self._model.forward(batch).total_loss
+                loss = self._model.forward(batch).mae.total_loss
 
                 total_loss += loss.item()
                 average_loss = total_loss / batch_no

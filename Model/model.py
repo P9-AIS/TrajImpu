@@ -8,7 +8,7 @@ from Model.brits import BRITS
 from Model.ais_decoder import ExtraDecodeOutput, HeterogeneousAttributeDecoder
 from ModelTypes.ais_dataset_masked import AISBatch
 from ModelTypes.ais_stats import AISStats
-from ModelUtils.loss_calculator import LossCalculator, LossOutput
+from ModelUtils.loss_calculator import LossCalculator, LossOutput, LossTypes
 
 
 @dataclass
@@ -56,7 +56,7 @@ class Model(nn.Module):
 
         self.loss_calculator = loss_calculator
 
-    def forward(self, ais_batch: AISBatch) -> LossOutput:
+    def forward(self, ais_batch: AISBatch) -> LossTypes:
         observed = ais_batch.observed_data.contiguous().to(self._cfg.device)
         masks = ais_batch.masks.to(self._cfg.device)
 
@@ -90,8 +90,6 @@ class Model(nn.Module):
             if self.training:
                 tf_mask = (torch.rand(batch_idx.size(0), device=first_imputed.device)
                            < self._cfg.teacher_forcing_ratio).float().unsqueeze(-1)
-
-                # do NOT detach here
                 first_input = tf_mask * first_encoded + (1 - tf_mask) * first_imputed
             else:
                 first_input = first_imputed

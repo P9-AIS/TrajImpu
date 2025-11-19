@@ -1,6 +1,10 @@
 
+import math
 import os
+
+import pyproj
 from ModelData.i_model_data_access_handler import IModelDataAccessHandler
+from ModelTypes.ais_col_dict import AISColDict
 from ModelTypes.ais_dataset_masked import AISDatasetMasked
 from ModelTypes.ais_dataset_processed import AISDatasetProcessed
 from ModelTypes.ais_dataset_raw import AISDatasetRaw
@@ -9,6 +13,7 @@ import numpy as np
 from enum import Enum
 from dataclasses import dataclass
 from ModelUtils.geo_utils import GeoUtils
+from ForceUtils.geo_converter import GeoConverter as gc
 
 
 class MaskingStrategy(Enum):
@@ -90,7 +95,6 @@ class DataProcessor:
 
     def _process_dataset(self, dataset: AISDatasetRaw) -> AISDatasetProcessed:
         data = self._get_data(dataset)
-        # labels = self._get_labels(dataset)
         return AISDatasetProcessed(data)
 
     def _get_data(self, dataset: AISDatasetRaw) -> np.ndarray:
@@ -105,6 +109,8 @@ class DataProcessor:
             group_trajectories = self._get_trajectories_from_group(groups[i], self._cfg.traj_len)
             if group_trajectories.size > 0:
                 trajectories = np.vstack((trajectories, np.array(group_trajectories, dtype=np.float32)))
+
+        trajectories = DataProcessor.convert_trajectories_positions_to_displacement(trajectories)
 
         return trajectories
 
@@ -129,6 +135,38 @@ class DataProcessor:
                         self._rng.integers(0, seq_length - self._cfg.lead_len - self._num_masked_values)
                     masks[i, missing_indices, :] = 0.0
         return masks
+
+    @staticmethod
+    def convert_trajectories_positions_to_displacement(trajectories: np.ndarray) -> np.ndarray:
+        displaced = trajectories.copy()
+        batch, seq, _ = trajectories.shape
+
+        # Initialize pyproj transformer: WGS84 lat/lon -> EPSG:3034 (meters)
+        transformer = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:3034", always_xy=True)
+
+        # Convert all lat/lon to E/N in meters
+        lons = trajectories[:, :, 2].reshape(-1)
+        lats = trajectories[:, :, 1].reshape(-1)
+        E, N = transformer.transform(lons, lats)
+        E = E.reshape(batch, seq)
+        N = N.reshape(batch, seq)
+
+        # Compute step-wise deltas in meters
+        delta_E = np.zeros_like(E)
+        delta_N = np.zeros_like(N)
+        delta_E[:, 1:] = E[:, 1:] - E[:, :-1]
+        delta_N[:, 1:] = N[:, 1:] - N[:, :-1]
+
+        displaced[:, :, 1] = delta_N  # latitude delta → north
+        displaced[:, :, 2] = delta_E  # longitude delta → east
+
+        return displaced
+
+    @staticmethod
+    def _spatially_convert_dataset(dataset: AISDatasetRaw) -> AISDatasetRaw:
+        lats, lons = dataset.dataset[:, 2], dataset.dataset[:, 3]
+        dataset.dataset[:, 2], dataset.dataset[:, 3] = gc.espg4326_to_epsg3034_batch(lons, lats)
+        return dataset
 
     @staticmethod
     def _group_dataset(dataset: AISDatasetRaw) -> list[AISDatasetRaw]:

@@ -1,4 +1,5 @@
 from datetime import date
+import numpy as np
 from pyproj import Transformer, Geod
 import math
 import wmm2020
@@ -45,6 +46,14 @@ class GeoConverter:
         """
         E, N = GeoConverter._from_espg4326.transform(lon, lat)
         return E, N
+
+    @staticmethod
+    def espg4326_to_epsg3034_batch(lon: np.ndarray, lat: np.ndarray):
+        catted = np.column_stack((lon.flatten(), lat.flatten()))
+        transformed = GeoConverter._from_espg4326.transform(catted[:, 0], catted[:, 1])
+        ES = transformed[0].reshape(lon.shape)
+        NS = transformed[1].reshape(lat.shape)
+        return ES, NS
 
     @staticmethod
     def epsg3034_to_cell(E, N, E0, N0, cell_size=50.0, origin_is_cell_center=False):
