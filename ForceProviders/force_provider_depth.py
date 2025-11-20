@@ -89,7 +89,7 @@ class DepthForceProvider(IForceProvider):
             # .percentile_threshold(self._cfg.low_percentile_cutoff, self._cfg.high_percentile_cutoff)
             .normalize()
             .power_transform(1 / self._cfg.sensitivity1)
-            .capture_distribution("after_power1")
+            # .capture_distribution("after_power1")
             .gaussian_blur(scaled_gaussian_sigma)
             # .normalize()
             # .power_transform(1 / self._cfg.sensitivity2)
@@ -130,8 +130,8 @@ class DepthForceProvider(IForceProvider):
         for i in range(b):
             batch_forces = []
             for j in range(s):
-                lon = vals[i, j, AISColDict.EASTERN_DELTA.value].item()
-                lat = vals[i, j, AISColDict.NORTHERN_DELTA.value].item()
+                lat = vals[i, j, 0].item()
+                lon = vals[i, j, 1].item()
                 force_vec = self.get_force(Params(lon=lon, lat=lat))
                 batch_forces.append([force_vec.x, force_vec.y, force_vec.z])
             forces.append(batch_forces)

@@ -3,7 +3,7 @@ import numpy as np
 from pyproj import Transformer, Geod
 import math
 import wmm2020
-
+import torch
 from ForceTypes.vec3 import Vec3
 
 
@@ -54,6 +54,26 @@ class GeoConverter:
         ES = transformed[0].reshape(lon.shape)
         NS = transformed[1].reshape(lat.shape)
         return ES, NS
+
+    @staticmethod
+    def espg4326_to_epsg3034_batch_tensor(lon: torch.Tensor, lat: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        lon_cpu = lon.cpu().numpy()
+        lat_cpu = lat.cpu().numpy()
+        catted = np.column_stack((lon_cpu.flatten(), lat_cpu.flatten()))
+        transformed = GeoConverter._from_espg4326.transform(catted[:, 0], catted[:, 1])
+        ES = transformed[0].reshape(lon_cpu.shape)
+        NS = transformed[1].reshape(lat_cpu.shape)
+        return torch.tensor(ES, dtype=torch.float).to(lon.device), torch.tensor(NS, dtype=torch.float).to(lat.device)
+
+    @staticmethod
+    def epsg3034_to_espg4326_batch_tensor(E: torch.Tensor, N: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        E_cpu = E.cpu().numpy()
+        N_cpu = N.cpu().numpy()
+        catted = np.column_stack((E_cpu.flatten(), N_cpu.flatten()))
+        transformed = GeoConverter._to_espg4326.transform(catted[:, 0], catted[:, 1])
+        lon = transformed[0].reshape(E_cpu.shape)
+        lat = transformed[1].reshape(N_cpu.shape)
+        return torch.tensor(lon, dtype=torch.float).to(E.device), torch.tensor(lat, dtype=torch.float).to(N.device)
 
     @staticmethod
     def epsg3034_to_cell(E, N, E0, N0, cell_size=50.0, origin_is_cell_center=False):

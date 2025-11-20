@@ -6,9 +6,11 @@ from Model.ais_encoder import HeterogeneousAttributeEncoder
 from Model.afa_module import AFAModule
 from Model.brits import BRITS
 from Model.ais_decoder import ExtraDecodeOutput, HeterogeneousAttributeDecoder
+from ModelTypes.ais_col_dict import AISColDict
 from ModelTypes.ais_dataset_masked import AISBatch
 from ModelTypes.ais_stats import AISStats
 from ModelUtils.loss_calculator import LossCalculator, LossOutput, LossTypes
+from ForceUtils.geo_converter import GeoConverter as GC
 
 
 @dataclass
@@ -53,9 +55,10 @@ class Model(nn.Module):
         self.loss_calculator = loss_calculator
 
     def forward(self, ais_batch: AISBatch) -> LossTypes:
-        b, s, f = ais_batch.observed_data.size()
 
         timestamps = ais_batch.observed_timestamps.contiguous().to(self._cfg.device)
+        lats = ais_batch.lats.contiguous().to(self._cfg.device)
+        lons = ais_batch.lons.contiguous().to(self._cfg.device)
         observed = ais_batch.observed_data.contiguous().to(self._cfg.device)
         masks = ais_batch.masks.to(self._cfg.device)
         fine_masks = torch.repeat_interleave(masks, self._cfg.dim_ais_attr_encoding, dim=2).detach()
@@ -65,12 +68,14 @@ class Model(nn.Module):
         all_truth = []
 
         encoded = self.ais_encoder(observed)
+        features, _ = self.afa_module(lats, lons, encoded)
+        b, s, f = features.size()
 
         assert ais_batch.num_missing_values % 2 == 0, "Number of missing values must be even."
 
         for i in range(ais_batch.num_missing_values // 2):
 
-            brits_data = _prepare_brits_data(timestamps, encoded, fine_masks)
+            brits_data = _prepare_brits_data(timestamps, features, fine_masks)
 
             imputed = self.impu_module(brits_data, stage="test")["imputed_data"]
 
@@ -114,14 +119,41 @@ class Model(nn.Module):
             # decode
             first_decoded, first_extra = self.ais_decoder(first_input)
             last_decoded, last_extra = self.ais_decoder(last_input)
+            eastern_deltas_first = first_decoded[batch_idx, :, AISColDict.EASTERN_DELTA.value].detach()
+            northern_deltas_first = first_decoded[batch_idx, :, AISColDict.NORTHERN_DELTA.value].detach()
+            eastern_deltas_last = last_decoded[batch_idx, :, AISColDict.EASTERN_DELTA.value].detach()
+            northern_deltas_last = last_decoded[batch_idx, :, AISColDict.NORTHERN_DELTA.value].detach()
+
+            # udpate lat lons based on deltas
+            self.update_lat_lon(lats, lons, eastern_deltas_first, northern_deltas_first,
+                                first_mask_idx, direction="forward")
+            self.update_lat_lon(lats, lons, eastern_deltas_last, northern_deltas_last,
+                                last_mask_idx, direction="backward")
+
+            # get updated lat lons
+            first_lat = lats[batch_idx, first_mask_idx]
+            first_lon = lons[batch_idx, first_mask_idx]
+            last_lat = lats[batch_idx, last_mask_idx]
+            last_lon = lons[batch_idx, last_mask_idx]
+
+            first_features, _ = self.afa_module(
+                first_lat.unsqueeze(1),
+                first_lon.unsqueeze(1),
+                first_input
+            )
+
+            last_features, _ = self.afa_module(
+                last_lat.unsqueeze(1),
+                last_lon.unsqueeze(1),
+                last_input
+            )
 
             # update encoded sequence with NEW ground truth / imputed value
-            first_scatter_index = first_mask_idx.view(-1, 1, 1).expand(-1, 1, encoded.size(2))
-            last_scatter_index = last_mask_idx.view(-1, 1, 1).expand(-1, 1, encoded.size(2))
+            first_scatter_index = first_mask_idx.view(-1, 1, 1).expand(-1, 1, f)
+            last_scatter_index = last_mask_idx.view(-1, 1, 1).expand(-1, 1, f)
 
-            # This detach breaks the autoregressive graph – CORRECT
-            encoded = encoded.scatter(1, first_scatter_index, first_encoded.detach())
-            encoded = encoded.scatter(1, last_scatter_index, last_encoded.detach())
+            features = features.scatter(1, first_scatter_index, first_features.detach())
+            features = features.scatter(1, last_scatter_index, last_features.detach())
 
             fine_masks = fine_masks.scatter(1, first_scatter_index, 1)
             fine_masks = fine_masks.scatter(1, last_scatter_index, 1)
@@ -143,6 +175,32 @@ class Model(nn.Module):
         )
 
         return loss
+
+    def update_lat_lon(self, lats: torch.Tensor, lons: torch.Tensor, eastern_deltas: torch.Tensor,
+                       northern_deltas: torch.Tensor, mask_indices: torch.Tensor, direction: str) -> None:
+        b, s = lats.size()
+        batch_idx = torch.arange(b, device=lats.device)
+        if direction == "forward":
+            prev_mask_indices = mask_indices - 1
+            lats_to_update = lats[batch_idx, prev_mask_indices]
+            lons_to_update = lons[batch_idx, prev_mask_indices]
+            E, N = GC.espg4326_to_epsg3034_batch_tensor(lons_to_update, lats_to_update)
+            E += eastern_deltas.squeeze(-1)
+            N += northern_deltas.squeeze(-1)
+            lons_updated, lats_updated = GC.epsg3034_to_espg4326_batch_tensor(E, N)
+            lats[batch_idx, mask_indices] = lats_updated
+            lons[batch_idx, mask_indices] = lons_updated
+
+        elif direction == "backward":
+            prev_mask_indices = mask_indices + 1
+            lats_to_update = lats[batch_idx, prev_mask_indices]
+            lons_to_update = lons[batch_idx, prev_mask_indices]
+            E, N = GC.espg4326_to_epsg3034_batch_tensor(lons_to_update, lats_to_update)
+            E -= eastern_deltas.squeeze(-1)
+            N -= northern_deltas.squeeze(-1)
+            lons_updated, lats_updated = GC.epsg3034_to_espg4326_batch_tensor(E, N)
+            lats[batch_idx, mask_indices] = lats_updated
+            lons[batch_idx, mask_indices] = lons_updated
 
 
 def _prepare_brits_data(timestamps, encoded_data, masks):

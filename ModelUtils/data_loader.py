@@ -55,6 +55,8 @@ class AisDataLoader:
         def extract_subset(idxs):
             return AISDatasetMasked(
                 dataset.timestamps[idxs],
+                dataset.lats[idxs],
+                dataset.lons[idxs],
                 dataset.data[idxs],
                 dataset.masks[idxs],
                 dataset.num_masked_values,

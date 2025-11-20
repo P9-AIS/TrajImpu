@@ -16,11 +16,15 @@ class AISBatch:
     masks: torch.Tensor
     num_missing_values: int
     num_values_in_sequence: int
+    lats: torch.Tensor
+    lons: torch.Tensor
 
 
 class AISDatasetMasked(Dataset[AISBatch]):
-    def __init__(self, timestamps: np.ndarray, data: np.ndarray, masks: np.ndarray, num_masked_values: int, num_values_in_sequence: int, stats: AISStats):
+    def __init__(self, timestamps: np.ndarray, lats: np.ndarray, lons: np.ndarray, data: np.ndarray, masks: np.ndarray, num_masked_values: int, num_values_in_sequence: int, stats: AISStats):
         self.timestamps = timestamps
+        self.lats = lats
+        self.lons = lons
         self.data = data
         self.masks = masks
         self.num_masked_values = num_masked_values
@@ -37,6 +41,8 @@ class AISDatasetMasked(Dataset[AISBatch]):
             masks=torch.tensor(self.masks[idx], dtype=torch.int8, requires_grad=False),  # [maxlen, n]
             num_missing_values=self.num_masked_values,  # scalar
             num_values_in_sequence=self.num_values_in_sequence,  # scalar
+            lats=torch.tensor(self.lats[idx], dtype=torch.float32, requires_grad=False),
+            lons=torch.tensor(self.lons[idx], dtype=torch.float32, requires_grad=False),
         )
 
     @staticmethod
@@ -47,6 +53,8 @@ class AISDatasetMasked(Dataset[AISBatch]):
             masks=torch.stack([b.masks for b in batch]),
             num_missing_values=max(b.num_missing_values for b in batch),  # or keep as list
             num_values_in_sequence=max(b.num_values_in_sequence for b in batch),  # or list
+            lats=torch.stack([b.lats for b in batch]),
+            lons=torch.stack([b.lons for b in batch]),
         )
 
     @staticmethod
@@ -58,6 +66,8 @@ class AISDatasetMasked(Dataset[AISBatch]):
             num_masked_values=num_missing_values,
             num_values_in_sequence=num_values_in_sequence,
             stats=processed_dataset.stats,
+            lats=processed_dataset.lats,
+            lons=processed_dataset.lons,
         )
         return instance
 
@@ -66,6 +76,8 @@ class AISDatasetMasked(Dataset[AISBatch]):
         self.data = np.vstack((self.data, other.data))
         self.masks = np.vstack((self.masks, other.masks))
         self.stats = self.stats.combine(other.stats)
+        self.lats = np.vstack((self.lats, other.lats))
+        self.lons = np.vstack((self.lons, other.lons))
 
     def save(self, path: str):
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -76,6 +88,8 @@ class AISDatasetMasked(Dataset[AISBatch]):
             data=self.data,
             timestamps=self.timestamps,
             masks=self.masks,
+            lats=self.lats,
+            lons=self.lons,
         )
         print(f"Saved masked ais dataset of {self.data.shape[0]:,} trajectories\n")
 
@@ -87,5 +101,7 @@ class AISDatasetMasked(Dataset[AISBatch]):
             dataset.data = data['data']
             dataset.timestamps = data['timestamps']
             dataset.masks = data['masks']
+            dataset.lats = data['lats']
+            dataset.lons = data['lons']
         print(f"Loaded masked ais dataset of {dataset.data.shape[0]:,} trajectories\n")
         return dataset

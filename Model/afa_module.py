@@ -22,10 +22,10 @@ class AFAModule(nn.Module):
         # Linear projection for forces to feature space (for K/V)
         self.force_proj = nn.Linear(3, feature_dim)
 
-    def forward(self, ais_data: torch.Tensor, encoded_data: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, lats: torch.Tensor, lons: torch.Tensor, encoded_data: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         b, s, feature_dim = encoded_data.shape
 
-        F_set = self._get_forces(ais_data)  # [b, s, num_forces, 3]
+        F_set = self._get_forces(lats, lons)  # [b, s, num_forces, 3]
         num_forces = F_set.shape[2]
 
         # Flatten batch/time dims for attention
@@ -42,14 +42,14 @@ class AFAModule(nn.Module):
 
         return attn_output, attn_scores
 
-    def _get_forces(self, vals: torch.Tensor) -> torch.Tensor:
-        b, s, _ = vals.shape
+    def _get_forces(self, lats: torch.Tensor, lons: torch.Tensor) -> torch.Tensor:
+        b, s = lats.shape
         num_forces = len(self._force_providers)
+        lat_lons = torch.stack((lats, lons), dim=-1)  # [b, s, 2]
 
-        all_forces = torch.empty(b, s, num_forces, 3, device=vals.device)
-
+        all_forces = torch.empty(b, s, num_forces, 3, device=lats.device)
         for i, provider in enumerate(self._force_providers):
-            forces = provider.get_forces(vals)
+            forces = provider.get_forces(lat_lons)
             all_forces[:, :, i, :] = forces
 
         return all_forces
