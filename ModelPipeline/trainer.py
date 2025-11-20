@@ -72,6 +72,7 @@ class Trainer:
         with torch.enable_grad():
             for batch_no, batch in enumerate(it, start=1):
                 self._optimizer.zero_grad()
+
                 loss = self._model.forward(batch)
                 loss.mse.total_loss.backward()
                 self._optimizer.step()
@@ -86,6 +87,8 @@ class Trainer:
                 self._writer.add_scalar("loss/train_heading", loss.mae.heading_loss.item(), self._global_training_step)
                 self._writer.add_scalar("loss/train_draught", loss.mae.draught_loss.item(), self._global_training_step)
                 self._writer.add_scalar("loss/train_vessel_type", loss.mae.vessel_type_loss.item(),
+                                        self._global_training_step)
+                self._writer.add_scalar("loss/train_haversine", loss.mae.haversine_loss.item(),
                                         self._global_training_step)
 
                 total_loss += loss.mse.total_loss.item()

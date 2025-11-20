@@ -49,24 +49,23 @@ heatmapGeneratorCfg:
   target_pixel_size: 4000
   color_map: 'jet' # Options: 'plasma', 'viridis', 'inferno', 'jet'
 
+forceDataUploadHandlerCfg:
+  server_address: "http://trajviz_devcontainer-devcontainer-1:4000"
+
 
 modelCfg:
     device: "cuda"
-
+    teacher_forcing_ratio: 0.5
     # encoder
-    dim_ais_attr_encoding: 16
-    max_delta: 0.0
+    dim_ais_attr_encoding: 32
 
     # afa module
     num_layers: 2
     num_head: 4
 
     # brits
-    dim_rnn_hidden: 10
+    dim_rnn_hidden: 128
     MIT: true
-
-    # decoder
-    dim_hidden: 64
 
 modelDataCfg:
   area: "string"
@@ -83,18 +82,18 @@ modelDataLoaderCfg:
   date_step: 1
 
 modelDataProcessorCfg:
-  traj_len: 200
+  traj_len: 100
   lead_len: 10
   output_dir: "Data"
   masking_strategy: "POINT_MISSING"
   masking_percentage: 0.1
   min_sog: 1
-  max_time_gap: 600
-  max_traj_gap_distance_m: 5000.0
+  max_time_gap: 120
+  max_traj_gap_distance_m: 1000.0
 
 modelTrainerCfg:
   output_dir: "Outputs"
-  num_epochs: 10
+  num_epochs: 100
   learning_rate: 0.001
   weight_decay: 0.0001
   validation_patience: 3
@@ -111,4 +110,4 @@ modelLossCfg:
 
 
 modelDataUploadHandlerCfg:
-  server_address: "http://localhost:4000"
+  server_address: "http://trajviz_devcontainer-devcontainer-1:4000"

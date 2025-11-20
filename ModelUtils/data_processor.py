@@ -46,6 +46,9 @@ class DataProcessor:
         self._rng = np.random.default_rng()
         self._num_masked_values = int(self._cfg.masking_percentage * self._cfg.traj_len)
 
+        if self._num_masked_values % 2 != 0:
+            self._num_masked_values += 1
+
         if self._cfg.masking_percentage * self._cfg.traj_len >= (self._cfg.traj_len - 2 * self._cfg.lead_len):
             raise ValueError("Masking percentage is too high for the given lead length and trajectory length.")
 
@@ -110,8 +113,8 @@ class DataProcessor:
             if group_trajectories.size > 0:
                 trajectories = np.vstack((trajectories, np.array(group_trajectories, dtype=np.float32)))
 
+        # trajectories = DataProcessor.convert_trajectories_positions_to_displacement(trajectories)
         trajectories = DataProcessor.convert_trajectories_positions_to_displacement(trajectories)
-
         return trajectories
 
     def _get_masks(self, dataset: AISDatasetProcessed) -> np.ndarray:
@@ -163,10 +166,20 @@ class DataProcessor:
         return displaced
 
     @staticmethod
-    def _spatially_convert_dataset(dataset: AISDatasetRaw) -> AISDatasetRaw:
-        lats, lons = dataset.dataset[:, 2], dataset.dataset[:, 3]
-        dataset.dataset[:, 2], dataset.dataset[:, 3] = gc.espg4326_to_epsg3034_batch(lons, lats)
-        return dataset
+    def _spatially_convert_dataset(trajectories: np.ndarray) -> np.ndarray:
+        transformer = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:3034", always_xy=True)
+        batch, seq, _ = trajectories.shape
+
+        lons = trajectories[:, :, 2].reshape(-1)
+        lats = trajectories[:, :, 1].reshape(-1)
+        E, N = transformer.transform(lons, lats)
+        E = E.reshape(batch, seq)
+        N = N.reshape(batch, seq)
+
+        trajectories[:, :, 1] = N  # latitude → north
+        trajectories[:, :, 2] = E  # longitude → east
+
+        return trajectories
 
     @staticmethod
     def _group_dataset(dataset: AISDatasetRaw) -> list[AISDatasetRaw]:
@@ -214,7 +227,7 @@ class DataProcessor:
         valid_trajectories = np.ndarray((0, traj_len, num_attributes), dtype=np.float32)
         for traj in same_length_trajectories:
             if self._is_valid_trajectory(traj):
-                valid_trajectories = np.vstack((valid_trajectories, np.array([traj], dtype=np.float32)))
+                valid_trajectories = np.vstack((valid_trajectories, traj.reshape(1, traj_len, num_attributes)))
 
         return valid_trajectories
 

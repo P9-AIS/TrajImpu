@@ -2,8 +2,8 @@ from enum import Enum
 
 
 class AISColDict(Enum):
-    LATITUDE = 0
-    LONGITUDE = 1
+    NORTHERN_DELTA = 0
+    EASTERN_DELTA = 1
     ROT = 2
     SOG = 3
     COG = 4

@@ -14,10 +14,11 @@ class AISDatasetProcessed():
 
     def combine(self, other: "AISDatasetProcessed"):
         self.data = np.vstack((self.data, other.data))
+        self.timestamps = np.vstack((self.timestamps, other.timestamps))
         self.stats = self.stats.combine(other.stats)
 
     def _get_data(self, data: np.ndarray) -> tuple[np.ndarray, AISStats, np.ndarray]:
-        timestamps = data[:, :, 0]
+        timestamps = data[:, :, 0].astype(np.int32)
         data = data[:, :, 1:]
         stats = self._get_stats(data)
 
@@ -34,8 +35,8 @@ class AISDatasetProcessed():
         num_trajs = data.shape[0]
         num_records = data.shape[0] * data.shape[1]
 
-        lat_column = data[:, :, AISColDict.LATITUDE.value]
-        lon_column = data[:, :, AISColDict.LONGITUDE.value]
+        lat_column = data[:, :, AISColDict.NORTHERN_DELTA.value]
+        lon_column = data[:, :, AISColDict.EASTERN_DELTA.value]
         vessel_type_column = data[:, :, AISColDict.VESSEL_TYPE.value].astype(int)
         draught_column = data[:, :, AISColDict.DRAUGHT.value]
         sog_column = data[:, :, AISColDict.SOG.value]

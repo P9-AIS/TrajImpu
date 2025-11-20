@@ -148,15 +148,15 @@ class HeterogeneousAttributeDecoder(nn.Module):
         self.rot_continuous_decoder = ContinuousDecoderTwo(feature_dim)
 
         self.vessel_type_discrete_decoder = DiscreteDecoder(
-            feature_dim, output_dim, len(self.stats.vessel_types)+1)
+            feature_dim, output_dim, len(self.stats.vessel_types))
 
-    def forward(self, ais_data: torch.Tensor):
+    def forward(self, ais_data: torch.Tensor) -> tuple[torch.Tensor, ExtraDecodeOutput]:
         b, s, f = ais_data.shape
 
         af = f // len(AISColDict)
 
-        lat_encoding = ais_data[:, :, AISColDict.LATITUDE.value*af: (AISColDict.LATITUDE.value+1)*af]
-        lon_encoding = ais_data[:, :, AISColDict.LONGITUDE.value*af: (AISColDict.LONGITUDE.value+1)*af]
+        lat_encoding = ais_data[:, :, AISColDict.NORTHERN_DELTA.value*af: (AISColDict.NORTHERN_DELTA.value+1)*af]
+        lon_encoding = ais_data[:, :, AISColDict.EASTERN_DELTA.value*af: (AISColDict.EASTERN_DELTA.value+1)*af]
         cog_encoding = ais_data[:, :, AISColDict.COG.value*af: (AISColDict.COG.value+1)*af]
         heading_encoding = ais_data[:, :, AISColDict.HEADING.value*af: (AISColDict.HEADING.value+1)*af]
         draught_encoding = ais_data[:, :, AISColDict.DRAUGHT.value*af: (AISColDict.DRAUGHT.value+1)*af]

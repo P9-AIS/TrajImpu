@@ -107,7 +107,7 @@ class HeterogeneousAttributeEncoder(nn.Module):
             feature_dim, num_classes=len(stats.vessel_types))
 
         self.output_dim = (len(AISColDict) * feature_dim)
-        self.latitude_col_idx = AISColDict.LATITUDE.value
+        self.latitude_col_idx = AISColDict.NORTHERN_DELTA.value
 
     def forward(self, ais_data: torch.Tensor):
         tensor_input = ais_data
@@ -136,11 +136,11 @@ class HeterogeneousAttributeEncoder(nn.Module):
         rot_max_matrix = rot_max.unsqueeze(0).repeat(b*s, 1).view(b, s, -1)  # [b, s, 1]
 
         lat_output = self.lat_continous_encoder(
-            tensor_input[:, :, AISColDict.LATITUDE.value:AISColDict.LATITUDE.value+1],
+            tensor_input[:, :, AISColDict.NORTHERN_DELTA.value:AISColDict.NORTHERN_DELTA.value+1],
             lat_min_matrix, lat_max_matrix)
 
         lon_output = self.lon_continous_encoder(
-            tensor_input[:, :, AISColDict.LONGITUDE.value:AISColDict.LONGITUDE.value+1],
+            tensor_input[:, :, AISColDict.EASTERN_DELTA.value:AISColDict.EASTERN_DELTA.value+1],
             lon_min_matrix, lon_max_matrix)
 
         cog_output = self.cog_cyclical_encoder(

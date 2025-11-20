@@ -143,8 +143,8 @@ class TrafficForceProvider(IForceProvider):
         for i in range(b):
             batch_forces = []
             for j in range(s):
-                lon = vals[i, j, AISColDict.LONGITUDE.value].item()
-                lat = vals[i, j, AISColDict.LATITUDE.value].item()
+                lon = vals[i, j, AISColDict.EASTERN_DELTA.value].item()
+                lat = vals[i, j, AISColDict.NORTHERN_DELTA.value].item()
                 force_vec = self.get_force(Params(lon=lon, lat=lat))
                 batch_forces.append([force_vec.x, force_vec.y, force_vec.z])
             forces.append(batch_forces)
