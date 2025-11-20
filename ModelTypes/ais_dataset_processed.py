@@ -10,16 +10,31 @@ from ModelTypes.ais_stats import AISStats
 class AISDatasetProcessed():
     def __init__(self, data: np.ndarray):
         assert data.ndim == 3, "Data must be a 3D numpy array (num_samples, seq_len, num_features)."
-        self.data, self.stats, self.timestamps = self._get_data(data)
+        self.data, self.stats, self.timestamps, self.lats, self.lons = self._get_data(data)
 
     def combine(self, other: "AISDatasetProcessed"):
         self.data = np.vstack((self.data, other.data))
         self.timestamps = np.vstack((self.timestamps, other.timestamps))
+        self.lats = np.vstack((self.lats, other.lats))
+        self.lons = np.vstack((self.lons, other.lons))
         self.stats = self.stats.combine(other.stats)
 
-    def _get_data(self, data: np.ndarray) -> tuple[np.ndarray, AISStats, np.ndarray]:
-        timestamps = data[:, :, 0].astype(np.int32)
-        data = data[:, :, 1:]
+    def _get_data(self, data: np.ndarray) -> tuple[np.ndarray, AISStats, np.ndarray, np.ndarray, np.ndarray]:
+        timestamps = data[:, :, 0].copy().astype(np.int32)
+
+        lats = data[:, :, 1].copy()
+        lons = data[:, :, 2].copy()
+
+        delta_N = data[:, :, -2].copy()
+        delta_E = data[:, :, -1].copy()
+
+        data[:, :, 1] = delta_N
+        data[:, :, 2] = delta_E
+
+        data = np.delete(data, 0, axis=2)
+        data = np.delete(data, -1, axis=2)
+        data = np.delete(data, -1, axis=2)
+
         stats = self._get_stats(data)
 
         reverse_vessel_type_dict: dict[VesselType, int] = {v: k for k, v in stats.vessel_type_dict.items()}
@@ -28,7 +43,7 @@ class AISDatasetProcessed():
         vessel_type_enum = vec_to_enum(vessel_type_column)
         vessel_type_indices = np.vectorize(reverse_vessel_type_dict.get)(vessel_type_enum)
         data[:, :, AISColDict.VESSEL_TYPE.value] = vessel_type_indices
-        return data, stats, timestamps
+        return data, stats, timestamps, lats, lons
 
     def _get_stats(self, data: np.ndarray) -> AISStats:
         seq_len = data.shape[1]

@@ -113,8 +113,11 @@ class DataProcessor:
             if group_trajectories.size > 0:
                 trajectories = np.vstack((trajectories, np.array(group_trajectories, dtype=np.float32)))
 
-        # trajectories = DataProcessor.convert_trajectories_positions_to_displacement(trajectories)
-        trajectories = DataProcessor.convert_trajectories_positions_to_displacement(trajectories)
+        delta_E, delta_N = DataProcessor.get_deltas(trajectories)
+
+        trajectories = np.concatenate(
+            (trajectories, delta_N[:, :, np.newaxis], delta_E[:, :, np.newaxis]), axis=2, dtype=np.float32)
+
         return trajectories
 
     def _get_masks(self, dataset: AISDatasetProcessed) -> np.ndarray:
@@ -140,17 +143,17 @@ class DataProcessor:
         return masks
 
     @staticmethod
-    def convert_trajectories_positions_to_displacement(trajectories: np.ndarray) -> np.ndarray:
-        displaced = trajectories.copy()
+    def get_deltas(trajectories: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         batch, seq, _ = trajectories.shape
 
         # Initialize pyproj transformer: WGS84 lat/lon -> EPSG:3034 (meters)
         transformer = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:3034", always_xy=True)
 
         # Convert all lat/lon to E/N in meters
-        lons = trajectories[:, :, 2].reshape(-1)
-        lats = trajectories[:, :, 1].reshape(-1)
-        E, N = transformer.transform(lons, lats)
+        lons = trajectories[:, :, 2]
+        lats = trajectories[:, :, 1]
+
+        E, N = transformer.transform(lons.reshape(-1), lats.reshape(-1))
         E = E.reshape(batch, seq)
         N = N.reshape(batch, seq)
 
@@ -160,10 +163,7 @@ class DataProcessor:
         delta_E[:, 1:] = E[:, 1:] - E[:, :-1]
         delta_N[:, 1:] = N[:, 1:] - N[:, :-1]
 
-        displaced[:, :, 1] = delta_N  # latitude delta → north
-        displaced[:, :, 2] = delta_E  # longitude delta → east
-
-        return displaced
+        return delta_E, delta_N
 
     @staticmethod
     def _spatially_convert_dataset(trajectories: np.ndarray) -> np.ndarray:
