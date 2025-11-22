@@ -1,6 +1,7 @@
 
 
 from dataclasses import dataclass
+import json
 
 import pandas as pd
 from ModelData.i_model_data_access_handler import IModelDataAccessHandler
@@ -14,6 +15,7 @@ from ModelTypes.ais_dataset_raw import AISDatasetRaw
 from ForceTypes.vessel_types import VesselType
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
+from shapely.geometry import shape, Point
 
 
 @dataclass
@@ -196,6 +198,9 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
         csv_file_path = self.download_csv_files([date])[0]
         np_file_path = self._coarse_processed_data_filename(csv_file_path)
 
+        with open("Data/assets/eez.json", "r") as f:
+            zone = json.load(f)
+
         if os.path.exists(np_file_path):
             print(f"{np_file_path} np file exists - skipping...")
             return AISDatasetRaw.load(np_file_path)
@@ -240,6 +245,15 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
 
         print("Removing duplicate messages (same MMSI + timestamp)...")
         df = df.drop_duplicates(subset=["MMSI", "# Timestamp"])
+
+        print("Remove data outside area of interest...")
+        multipolygon = shape(zone["features"][0]["geometry"])
+        points = [Point(lon, lat) for lat, lon in zip(df['Latitude'], df['Longitude'])]
+        mask = []
+        for point in tqdm(points, desc="Filtering points by area"):
+            mask.append(multipolygon.contains(point))
+
+        df = df[mask]
 
         print("Converting DataFrame to numpy array...")
         data_array = df.to_numpy(dtype=float)

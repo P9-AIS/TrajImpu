@@ -22,7 +22,14 @@ class ModelDataUploadHandlerHTTP(IModelDataUploadHandler):
         if end_idx == -1:
             end_idx = len(dataset)
 
-        data = {"trajectory": dataset.data[start_idx:end_idx].tolist()}
+        lats = dataset.lats[start_idx:end_idx]
+        lons = dataset.lons[start_idx:end_idx]
+        data = dataset.data[start_idx:end_idx]
+
+        data[:, :, 0] = lats
+        data[:, :, 1] = lons
+
+        data = {"trajectory": data.tolist()}
 
         json_bytes = json.dumps(data).encode("utf-8")
         compressed = gzip.compress(json_bytes)
