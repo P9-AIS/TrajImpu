@@ -41,15 +41,15 @@ class ForceDataUploadHandlerHTTP(IForceDataUploadHandler):
 
         print(response.status_code, response.json())
 
-    def upload_image(self, image_path: str, name: str, area: Area) -> None:
+    def upload_image(self, image_path: str, name: str, area_3034: Area) -> None:
         with open(image_path, "rb") as f:
             img_bytes = f.read()
 
         ext = image_path.split(".")[-1].lower()
         image_format = ext if ext in ["png", "jpg", "jpeg", "tif", "tiff"] else "png"
 
-        top_right_lon, top_right_lat = GC.epsg3034_to_espg4326(area.top_right.E, area.top_right.N)
-        bottom_left_lon, bottom_left_lat = GC.epsg3034_to_espg4326(area.bottom_left.E, area.bottom_left.N)
+        top_right_lon, top_right_lat = GC.epsg3034_to_espg4326(area_3034.top_right.E, area_3034.top_right.N)
+        bottom_left_lon, bottom_left_lat = GC.epsg3034_to_espg4326(area_3034.bottom_left.E, area_3034.bottom_left.N)
 
         json_area = json.dumps({
             "top_right": {"lat": top_right_lat, "lon": top_right_lon},

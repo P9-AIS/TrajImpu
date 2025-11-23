@@ -6,5 +6,5 @@ from PIL import Image
 
 class IForceDataUploadHandler(ABC):
     @abstractmethod
-    def upload_image(self, image_path: str, name: str, area: Area) -> None:
+    def upload_image(self, image_path: str, name: str, area_3034: Area) -> None:
         pass

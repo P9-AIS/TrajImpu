@@ -12,13 +12,14 @@ if __name__ == "__main__":
     data_handler = ForceDataAccessHandlerDb(PostgresConnection(cfg.postgresCfg))
     depth_provider = DepthForceProvider(data_handler, cfg.depthForceProviderCfg)
     image_path_3034 = generate_heatmap_image(depth_provider.get_vectormap(), cfg.heatmapGeneratorCfg)
+    image_path_3857 = image_path_3034.replace(".png", "_3857.png")
 
-    image_path_3857, area = Reprojector.reproject_png_3034_to_3857(
+    new_area = Reprojector.reproject_png_3034_to_3857(
         image_path_3034,
-        image_path_3034.replace(".png", "_3857.png"),
+        image_path_3857,
         cfg.depthForceProviderCfg.area
     )
 
     upload_handler = ForceDataUploadHandlerHTTP(cfg.forceDataUploadHandlerCfg)
     upload_handler.upload_image(image_path_3034, "depth_heatmap_3034", cfg.depthForceProviderCfg.area)
-    upload_handler.upload_image(image_path_3857, "depth_heatmap_3857", area)
+    upload_handler.upload_image(image_path_3857, "depth_heatmap_3857", new_area)
