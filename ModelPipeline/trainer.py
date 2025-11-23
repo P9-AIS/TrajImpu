@@ -5,6 +5,7 @@ from tqdm import tqdm
 from Model.model import Model
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from ModelData.i_model_data_upload_handler import IModelDataUploadHandler
 
 
 @dataclass
@@ -15,6 +16,7 @@ class Config:
     weight_decay: float = 0.0001
     validation_patience: int = 3
     validation_every_n_epochs: int = 5
+    upload_every_n_steps: int = 100
 
 
 class Trainer:
@@ -22,18 +24,21 @@ class Trainer:
     _train_data_loader: DataLoader
     _validation_data_loader: DataLoader
     _optimizer: torch.optim.Optimizer
+    _upload_handler: IModelDataUploadHandler
 
-    def __init__(self, model: Model, train_data_loader: DataLoader, validation_data_loader: DataLoader, config: Config):
+    def __init__(self, model: Model, train_data_loader: DataLoader, validation_data_loader: DataLoader, upload_handler: IModelDataUploadHandler, config: Config):
         self._writer = SummaryWriter(flush_secs=1)
         self._cfg = config
         self._train_data_loader = train_data_loader
         self._validation_data_loader = validation_data_loader
         self._model = model
+        self._upload_handler = upload_handler
         self._optimizer = torch.optim.AdamW(self._model.parameters(),
                                             lr=self._cfg.learning_rate,
                                             weight_decay=self._cfg.weight_decay)
         self._global_training_step = 0
         self._global_validation_step = 0
+        self._global_upload_step = 0
 
     def train(self):
         print("Training the model...")
@@ -69,11 +74,13 @@ class Trainer:
         average_loss = 0.0
         self._model.train()
 
+        self._upload_handler.reset_predictions()
+
         with torch.enable_grad():
             for batch_no, batch in enumerate(it, start=1):
                 self._optimizer.zero_grad()
 
-                loss = self._model.forward(batch)
+                loss, (pred_lats, pred_lons, true_lats, true_lons) = self._model.forward(batch)
                 loss.mse.total_loss.backward()
                 self._optimizer.step()
                 self._global_training_step += 1
@@ -93,6 +100,16 @@ class Trainer:
 
                 total_loss += loss.mse.total_loss.item()
                 average_loss = total_loss / batch_no
+
+                if self._global_training_step % self._cfg.upload_every_n_steps == 0:
+                    self._global_upload_step += 1
+                    self._upload_handler.upload_predictions(
+                        step=self._global_upload_step,
+                        predicted_lats=pred_lats,
+                        predicted_lons=pred_lons,
+                        true_lats=true_lats,
+                        true_lons=true_lons,
+                    )
 
                 it.set_postfix(
                     ordered_dict={
@@ -114,8 +131,9 @@ class Trainer:
 
         with torch.no_grad():
             for batch_no, batch in enumerate(it, start=1):
-                loss = self._model.forward(batch).mae.total_loss
+                loss, _ = self._model.forward(batch)
 
+                loss = loss.mae.total_loss
                 total_loss += loss.item()
                 average_loss = total_loss / batch_no
 

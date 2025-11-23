@@ -98,6 +98,7 @@ modelTrainerCfg:
   weight_decay: 0.0001
   validation_patience: 3
   validation_every_n_epochs: 5
+  upload_every_n_steps: 5
 
 modelLossCfg:
   spatial_weight: 1.0

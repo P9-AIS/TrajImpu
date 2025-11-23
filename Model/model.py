@@ -54,11 +54,12 @@ class Model(nn.Module):
 
         self.loss_calculator = loss_calculator
 
-    def forward(self, ais_batch: AISBatch) -> LossTypes:
-
+    def forward(self, ais_batch: AISBatch) -> tuple[LossTypes, tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+        true_lats = ais_batch.lats.to(self._cfg.device)
+        true_lons = ais_batch.lons.to(self._cfg.device)
+        lats = true_lats.clone().contiguous().to(self._cfg.device)
+        lons = true_lons.clone().contiguous().to(self._cfg.device)
         timestamps = ais_batch.observed_timestamps.contiguous().to(self._cfg.device)
-        lats = ais_batch.lats.contiguous().to(self._cfg.device)
-        lons = ais_batch.lons.contiguous().to(self._cfg.device)
         observed = ais_batch.observed_data.contiguous().to(self._cfg.device)
         masks = ais_batch.masks.to(self._cfg.device)
         fine_masks = torch.repeat_interleave(masks, self._cfg.dim_ais_attr_encoding, dim=2).detach()
@@ -174,7 +175,7 @@ class Model(nn.Module):
             all_decoded_tensor, all_decoded_extra, all_truth_tensor
         )
 
-        return loss
+        return loss, (lats, lons, true_lats, true_lons)
 
     def update_lat_lon(self, lats: torch.Tensor, lons: torch.Tensor, eastern_deltas: torch.Tensor,
                        northern_deltas: torch.Tensor, mask_indices: torch.Tensor, direction: str) -> None:

@@ -8,10 +8,13 @@ from ModelPipeline.trainer import Trainer
 from ModelUtils.data_loader import AisDataLoader
 from ModelUtils.data_processor import DataProcessor
 from ModelUtils.loss_calculator import LossCalculator
+from ModelData.model_data_upload_handler_http import ModelDataUploadHandlerHTTP
 
 
 if __name__ == "__main__":
     cfg = parse_config("config.yaml")
+
+    upload_handler = ModelDataUploadHandlerHTTP(cfg.modelDataUploadHandlerCfg)
 
     force_data_connection = PostgresConnection(cfg.postgresCfg)
     force_data_handler = ForceDataAccessHandlerDb(force_data_connection)
@@ -26,5 +29,5 @@ if __name__ == "__main__":
 
     model = model.to(cfg.modelCfg.device)
 
-    trainer = Trainer(model, train_data_loader, test_data_loader, cfg.modelTrainerCfg)
+    trainer = Trainer(model, train_data_loader, test_data_loader, upload_handler, cfg.modelTrainerCfg)
     trainer.train()

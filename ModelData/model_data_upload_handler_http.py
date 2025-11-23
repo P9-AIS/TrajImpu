@@ -1,3 +1,4 @@
+import torch
 from ModelData.i_model_data_upload_handler import IModelDataUploadHandler
 from ModelTypes.ais_dataset_masked import AISDatasetMasked
 import numpy as np
@@ -40,5 +41,40 @@ class ModelDataUploadHandlerHTTP(IModelDataUploadHandler):
             data=compressed,
             headers={"Content-Type": "application/octet-stream"}  # just raw bytes
         )
+
+        print(response.status_code, response.json())
+
+    def upload_predictions(self, step: int, predicted_lats: torch.Tensor, predicted_lons: torch.Tensor,
+                           true_lats: torch.Tensor, true_lons: torch.Tensor) -> None:
+
+        concat = torch.stack([
+            predicted_lats,
+            predicted_lons,
+            true_lats,
+            true_lons
+        ], dim=-1)
+
+        concat = concat.cpu().numpy()
+
+        data = {
+            "step": step,
+            "predictions": concat.tolist()
+        }
+
+        json_bytes = json.dumps(data).encode("utf-8")
+        compressed = gzip.compress(json_bytes)
+
+        print(f"Uploading predictions for step {step} to {self._cfg.server_address}...")
+        response = requests.post(
+            f"{self._cfg.server_address}/predictions",
+            data=compressed,
+            headers={"Content-Type": "application/octet-stream"}  # just raw bytes
+        )
+
+        print(response.status_code, response.json())
+
+    def reset_predictions(self) -> None:
+        print(f"Resetting predictions on server at {self._cfg.server_address}...")
+        response = requests.post(f"{self._cfg.server_address}/predictions/reset")
 
         print(response.status_code, response.json())
