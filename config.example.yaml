@@ -21,10 +21,10 @@ trafficForceProviderCfg:
   vessel_types: ['cargo', 'tanker']
   output_dir: "Outputs/Traffic"
   sato_sigmas: [4, 8, 16, 32]
-  gaussian_sigma: 32
+  gaussian_sigma: 16.0
   low_percentile_cutoff: 1.0
   high_percentile_cutoff: 99
-  sensitivity1: 0.5
+  sensitivity1: 20
   sensitivity2: 1
 
 depthForceProviderCfg:

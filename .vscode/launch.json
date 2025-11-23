@@ -36,6 +36,14 @@
             "module": "src.upload_heatmap_depth",
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "Python Debugger: upload heatmap traffic",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.upload_heatmap_traffic",
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
     ]
 }
