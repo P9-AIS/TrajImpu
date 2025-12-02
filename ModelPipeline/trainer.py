@@ -93,18 +93,11 @@ class Trainer:
                 loss.mse.total_loss.backward()
                 self._optimizer.step()
                 self._global_training_step += 1
-                self._writer.add_scalar("loss/train", loss.mae.total_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_avg_mse", average_loss, epoch_no)
-                self._writer.add_scalar("loss/train_lat", loss.mae.lat_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_lon", loss.mae.lon_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_cog", loss.mae.cog_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_sog", loss.mae.sog_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_rot", loss.mae.rot_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_heading", loss.mae.heading_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_draught", loss.mae.draught_loss.item(), self._global_training_step)
-                self._writer.add_scalar("loss/train_vessel_type", loss.mae.vessel_type_loss.item(),
-                                        self._global_training_step)
-                self._writer.add_scalar("loss/train_haversine", loss.mae.haversine_loss.item(),
+                self._writer.add_scalar("train/total", loss.mae.total_loss.item(), self._global_training_step)
+                self._writer.add_scalar("train/avg_mse", average_loss, epoch_no)
+                self._writer.add_scalar("train/lat", loss.mae.lat_loss.item(), self._global_training_step)
+                self._writer.add_scalar("train/lon", loss.mae.lon_loss.item(), self._global_training_step)
+                self._writer.add_scalar("train/haversine", loss.mae.haversine_loss.item(),
                                         self._global_training_step)
 
                 total_loss += loss.mse.total_loss.item()
@@ -146,8 +139,8 @@ class Trainer:
                 total_loss += loss.item()
                 average_loss = total_loss / batch_no
 
-                self._writer.add_scalar("loss/validation", loss.item(), self._global_validation_step)
-                self._writer.add_scalar("loss/validation_avg", average_loss, epoch_no)
+                self._writer.add_scalar("validation/total", loss.item(), self._global_validation_step)
+                self._writer.add_scalar("validation/avg", average_loss, epoch_no)
 
                 self._global_validation_step += 1
 
@@ -187,21 +180,9 @@ class Trainer:
 
                 total_losses_mae["lat"] += loss.mae.lat_loss.item() * batch_size
                 total_losses_mae["lon"] += loss.mae.lon_loss.item() * batch_size
-                total_losses_mae["cog"] += loss.mae.cog_loss.item() * batch_size
-                total_losses_mae["sog"] += loss.mae.sog_loss.item() * batch_size
-                total_losses_mae["rot"] += loss.mae.rot_loss.item() * batch_size
-                total_losses_mae["heading"] += loss.mae.heading_loss.item() * batch_size
-                total_losses_mae["draught"] += loss.mae.draught_loss.item() * batch_size
-                total_losses_mae["vessel_type"] += loss.mae.vessel_type_loss.item() * batch_size
 
                 total_losses_smape["lat"] += loss.smape.lat_loss.item() * batch_size
                 total_losses_smape["lon"] += loss.smape.lon_loss.item() * batch_size
-                total_losses_smape["cog"] += loss.smape.cog_loss.item() * batch_size
-                total_losses_smape["sog"] += loss.smape.sog_loss.item() * batch_size
-                total_losses_smape["rot"] += loss.smape.rot_loss.item() * batch_size
-                total_losses_smape["heading"] += loss.smape.heading_loss.item() * batch_size
-                total_losses_smape["draught"] += loss.smape.draught_loss.item() * batch_size
-                total_losses_smape["vessel_type"] += loss.smape.vessel_type_loss.item() * batch_size
 
                 count += batch_size
 

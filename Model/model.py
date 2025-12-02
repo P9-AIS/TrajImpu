@@ -5,7 +5,7 @@ from ForceProviders.i_force_provider import IForceProvider
 from Model.ais_encoder import HeterogeneousAttributeEncoder
 from Model.afa_module import AFAModule
 from Model.brits import BRITS
-from Model.ais_decoder import ExtraDecodeOutput, HeterogeneousAttributeDecoder
+from Model.ais_decoder import HeterogeneousAttributeDecoder
 from ModelTypes.ais_col_dict import AISColDict
 from ModelTypes.ais_dataset_masked import AISBatch
 from ModelTypes.ais_stats import AISStats
@@ -48,9 +48,7 @@ class Model(nn.Module):
             cfg.dim_rnn_hidden, MIT=cfg.MIT, device=cfg.device
         ).to(cfg.device)
 
-        self.ais_decoder = HeterogeneousAttributeDecoder(
-            self.ais_encoding_dim, dataset_stats, self.ais_encoding_dim
-        ).to(cfg.device)
+        self.ais_decoder = HeterogeneousAttributeDecoder(self.ais_encoding_dim, dataset_stats).to(cfg.device)
 
         self.loss_calculator = loss_calculator
 
@@ -68,7 +66,6 @@ class Model(nn.Module):
         fine_masks = torch.repeat_interleave(masks, self._cfg.dim_ais_attr_encoding, dim=2).detach()
 
         all_decoded = []
-        all_decoded_extra = []
         all_truth = []
 
         encoded = self.ais_encoder(observed)
@@ -121,8 +118,8 @@ class Model(nn.Module):
             last_encoded = last_encoded.unsqueeze(1)
 
             # decode
-            first_decoded, first_extra = self.ais_decoder(first_input)
-            last_decoded, last_extra = self.ais_decoder(last_input)
+            first_decoded = self.ais_decoder(first_input)
+            last_decoded = self.ais_decoder(last_input)
             eastern_deltas_first = first_decoded[batch_idx, :, AISColDict.EASTERN_DELTA.value].detach()
             northern_deltas_first = first_decoded[batch_idx, :, AISColDict.NORTHERN_DELTA.value].detach()
             eastern_deltas_last = last_decoded[batch_idx, :, AISColDict.EASTERN_DELTA.value].detach()
@@ -163,20 +160,16 @@ class Model(nn.Module):
             fine_masks = fine_masks.scatter(1, last_scatter_index, 1)
 
             all_decoded.insert(i, first_decoded)
-            all_decoded_extra.insert(i, first_extra)
             all_truth.insert(i, first_truth)
 
             all_decoded.insert(i + 1, last_decoded)
-            all_decoded_extra.insert(i + 1, last_extra)
             all_truth.insert(i + 1, last_truth)
 
         # concatenate all decoded steps
         all_decoded_tensor = torch.cat(all_decoded, dim=1)
         all_truth_tensor = torch.cat(all_truth, dim=1)
 
-        loss = self.loss_calculator.calculate_loss(
-            all_decoded_tensor, all_decoded_extra, all_truth_tensor
-        )
+        loss = self.loss_calculator.calculate_loss(all_decoded_tensor, all_truth_tensor)
 
         return loss, (lats, lons, true_lats, true_lons)
 

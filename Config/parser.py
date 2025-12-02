@@ -12,7 +12,6 @@ from ModelUtils.data_loader import Config as ModelDataLoaderConfig
 from ModelData.model_data_access_handler_csv import Config as ModelDataConfig
 from ModelUtils.data_processor import MaskingStrategy, Config as ModelProcessorConfig
 from ModelPipeline.trainer import Config as ModelTrainerConfig
-from ModelUtils.loss_calculator import Config as ModelLossConfig
 from ModelData.model_data_upload_handler_http import Config as ModelDataUploadHandlerConfig
 from dataclasses import dataclass
 
@@ -29,7 +28,6 @@ class Config:
     modelDataCfg: ModelDataConfig
     modelDataProcessorCfg: ModelProcessorConfig
     modelTrainerCfg: ModelTrainerConfig
-    modelLossCfg: ModelLossConfig
     modelDataUploadHandlerCfg: ModelDataUploadHandlerConfig
 
 
@@ -51,7 +49,6 @@ def parse_config(path: str) -> Config:
         modelDataCfg=ConfigVisitorRegistry.visit(ModelDataConfig, cfg_dict["modelDataCfg"]),
         modelDataProcessorCfg=ConfigVisitorRegistry.visit(ModelProcessorConfig, cfg_dict["modelDataProcessorCfg"]),
         modelTrainerCfg=ConfigVisitorRegistry.visit(ModelTrainerConfig, cfg_dict["modelTrainerCfg"]),
-        modelLossCfg=ConfigVisitorRegistry.visit(ModelLossConfig, cfg_dict["modelLossCfg"]),
         modelDataUploadHandlerCfg=ConfigVisitorRegistry.visit(
             ModelDataUploadHandlerConfig, cfg_dict["modelDataUploadHandlerCfg"])
     )
@@ -149,11 +146,6 @@ ConfigVisitorRegistry.register(
 ConfigVisitorRegistry.register(
     ModelConfig,
     lambda data: ModelConfig(**data)
-)
-
-ConfigVisitorRegistry.register(
-    ModelLossConfig,
-    lambda data: ModelLossConfig(**data)
 )
 
 ConfigVisitorRegistry.register(

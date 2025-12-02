@@ -102,15 +102,5 @@ modelTrainerCfg:
   validation_every_n_epochs: 5
   upload_every_n_steps: 5
 
-modelLossCfg:
-  spatial_weight: 1.0
-  cog_weight: 1.0
-  heading_weight: 1.0
-  draught_weight: 1.0
-  sog_weight: 1.0
-  rot_weight: 1.0
-  vessel_type_weight: 1.0
-
-
 modelDataUploadHandlerCfg:
   server_address: "http://trajviz_devcontainer-devcontainer-1:4000"

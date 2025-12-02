@@ -25,25 +25,11 @@ class AISDatasetProcessed():
         lats = data[:, :, 1].copy()
         lons = data[:, :, 2].copy()
 
-        delta_N = data[:, :, -2].copy()
-        delta_E = data[:, :, -1].copy()
+        new_data = data[:, :, -2:].copy()
 
-        data[:, :, 1] = delta_N
-        data[:, :, 2] = delta_E
+        stats = self._get_stats(new_data)
 
-        data = np.delete(data, 0, axis=2)
-        data = np.delete(data, -1, axis=2)
-        data = np.delete(data, -1, axis=2)
-
-        stats = self._get_stats(data)
-
-        reverse_vessel_type_dict: dict[VesselType, int] = {v: k for k, v in stats.vessel_type_dict.items()}
-        vessel_type_column = data[:, :, AISColDict.VESSEL_TYPE.value].astype(int)
-        vec_to_enum = np.vectorize(lambda x: VesselType(x))
-        vessel_type_enum = vec_to_enum(vessel_type_column)
-        vessel_type_indices = np.vectorize(reverse_vessel_type_dict.get)(vessel_type_enum)
-        data[:, :, AISColDict.VESSEL_TYPE.value] = vessel_type_indices
-        return data, stats, timestamps, lats, lons
+        return new_data, stats, timestamps, lats, lons
 
     def _get_stats(self, data: np.ndarray) -> AISStats:
         seq_len = data.shape[1]
@@ -52,40 +38,20 @@ class AISDatasetProcessed():
 
         lat_column = data[:, :, AISColDict.NORTHERN_DELTA.value]
         lon_column = data[:, :, AISColDict.EASTERN_DELTA.value]
-        vessel_type_column = data[:, :, AISColDict.VESSEL_TYPE.value].astype(int)
-        draught_column = data[:, :, AISColDict.DRAUGHT.value]
-        sog_column = data[:, :, AISColDict.SOG.value]
-        rot_column = data[:, :, AISColDict.ROT.value]
 
-        vessel_types_set = set(np.unique(vessel_type_column))
-        vessel_type_dict = {idx: VesselType(v_type) for idx, v_type in enumerate(vessel_types_set)}
         min_lat = np.min(lat_column)
         max_lat = np.max(lat_column)
         min_lon = np.min(lon_column)
         max_lon = np.max(lon_column)
-        min_draught = np.min(draught_column)
-        max_draught = np.max(draught_column)
-        min_sog = np.min(sog_column)
-        max_sog = np.max(sog_column)
-        min_rot = np.min(rot_column)
-        max_rot = np.max(rot_column)
 
         return AISStats(
             seq_len=seq_len,
             num_trajs=num_trajs,
             num_records=num_records,
-            vessel_types=vessel_types_set,
-            vessel_type_dict=vessel_type_dict,
             min_lat=min_lat,
             max_lat=max_lat,
             min_lon=min_lon,
             max_lon=max_lon,
-            min_draught=min_draught,
-            max_draught=max_draught,
-            min_sog=min_sog,
-            max_sog=max_sog,
-            min_rot=min_rot,
-            max_rot=max_rot
         )
 
     def save(self, path: str):
