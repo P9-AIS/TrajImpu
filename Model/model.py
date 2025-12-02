@@ -54,6 +54,9 @@ class Model(nn.Module):
 
         self.loss_calculator = loss_calculator
 
+    def __str__(self):
+        return "afa_model"
+
     def forward(self, ais_batch: AISBatch) -> tuple[LossTypes, tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
         true_lats = ais_batch.lats.to(self._cfg.device)
         true_lons = ais_batch.lons.to(self._cfg.device)
@@ -210,27 +213,32 @@ def _prepare_brits_data(timestamps, encoded_data, masks):
     - encoded_data must NOT be detached (BRITS must learn from it)
     - masks/deltas can be detached or not; they don't need gradients
     """
-
     b, s, f = encoded_data.size()
 
-    delta_data = torch.zeros((b, s, f), device=encoded_data.device).detach()
+    def compute_deltas(ts, ms):
+        delta_data = torch.zeros((b, s, f), device=encoded_data.device).detach()
 
-    for t in range(1, s):
-        time_gap = (timestamps[:, t] - timestamps[:, t - 1]).unsqueeze(-1).repeat_interleave(f, dim=1)
-        previous_mask = masks[:, t - 1, :]
-        reset_deltas = time_gap * previous_mask
-        accumulated_deltas = (time_gap + delta_data[:, t - 1, :]) * (1 - previous_mask)
-        delta_data[:, t, :] = reset_deltas + accumulated_deltas
+        for t in range(1, s):
+            time_gap = (ts[:, t] - ts[:, t - 1]).unsqueeze(-1).repeat_interleave(f, dim=1)
+            previous_mask = ms[:, t - 1, :]
+            reset_deltas = time_gap * previous_mask
+            accumulated_deltas = (time_gap + delta_data[:, t - 1, :]) * (1 - previous_mask)
+            delta_data[:, t, :] = reset_deltas + accumulated_deltas
+        return delta_data
+
+    forward_deltas = compute_deltas(timestamps, masks)
+    flipped_masks = torch.flip(masks, [1])
+    backward_deltas = compute_deltas(torch.flip(timestamps, [1]), flipped_masks)
 
     return {
         "forward": {
             "X": encoded_data,
             "missing_mask": masks,
-            "deltas": delta_data,
+            "deltas": forward_deltas,
         },
         "backward": {
             "X": torch.flip(encoded_data, [1]),
-            "missing_mask": torch.flip(masks, [1]),
-            "deltas": torch.flip(delta_data, [1]),
+            "missing_mask": flipped_masks,
+            "deltas": backward_deltas,
         },
     }

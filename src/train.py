@@ -23,11 +23,12 @@ if __name__ == "__main__":
     data_handler = ModelDataAccessHandlerCSV(cfg.modelDataCfg)
     data_processor = DataProcessor(data_handler, cfg.modelDataProcessorCfg)
     data_loader = AisDataLoader(data_processor, cfg.modelDataLoaderCfg)
-    train_data_loader, test_data_loader, stats = data_loader.get_data_loaders()
+    train_data_loader, valtest_data_loader, test_data_loader, stats = data_loader.get_data_loaders()
     loss_calculator = LossCalculator(cfg.modelLossCfg)
     model = Model(stats, [force_provider_depth], loss_calculator, cfg.modelCfg)
 
     model = model.to(cfg.modelCfg.device)
 
-    trainer = Trainer(model, train_data_loader, test_data_loader, upload_handler, cfg.modelTrainerCfg)
+    trainer = Trainer(model, train_data_loader, valtest_data_loader,
+                      test_data_loader, upload_handler, cfg.modelTrainerCfg)
     trainer.train()

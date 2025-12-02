@@ -73,10 +73,12 @@ modelDataCfg:
   output_dir: "Data"
 
 modelDataLoaderCfg:
-  batch_size: 64
+  batch_size: 32
   shuffle: true
   num_workers: 4
-  train_split: 0.8 # Proportion of data used for training
+  train_split: 0.8
+  validation_split: 0.1
+  test_split: 0.1
   start_date: 2024-03-01
   end_date: 2024-03-01
   date_step: 1
