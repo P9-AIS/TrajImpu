@@ -36,7 +36,7 @@ class LossOutput:
 class LossTypes:
     mse: LossOutput
     mae: LossOutput
-    # smape: LossOutput
+    smape: LossOutput
 
 
 @dataclass
@@ -125,6 +125,13 @@ class LossCalculator:
             return torch.nn.functional.mse_loss(prediction, truth)
         elif loss_func == "mae":
             return torch.nn.functional.l1_loss(prediction, truth)
+        elif loss_func == "smape":
+            # SMAPE formula: 2 * |y_pred - y_true| / (|y_pred| + |y_true|)
+            numerator = torch.abs(prediction - truth)
+            denominator = torch.abs(prediction) + torch.abs(truth)
+
+            epsilon = 1e-8
+            return 2 * torch.mean(numerator / (denominator + epsilon))
         else:
             raise ValueError(f"Unsupported loss function: {loss_func}")
 
@@ -132,7 +139,7 @@ class LossCalculator:
         return LossTypes(
             mse=self.get_loss_type("mse", imputed, ground_truth, imputed_extra),
             mae=self.get_loss_type("mae", imputed, ground_truth, imputed_extra),
-            # smape=self.get_loss_type("smape", imputed, ground_truth)
+            smape=self.get_loss_type("smape", imputed, ground_truth, imputed_extra)
         )
 
     @staticmethod

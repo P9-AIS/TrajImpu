@@ -165,10 +165,16 @@ class Trainer:
     def _run_test_batches(self, epoch_no: int):
         self._model.eval()
 
-        total_losses = {
+        total_losses_mae = {
             "lat": 0.0, "lon": 0.0, "cog": 0.0, "sog": 0.0,
             "rot": 0.0, "heading": 0.0, "draught": 0.0, "vessel_type": 0.0
         }
+
+        total_losses_smape = {
+            "lat": 0.0, "lon": 0.0, "cog": 0.0, "sog": 0.0,
+            "rot": 0.0, "heading": 0.0, "draught": 0.0, "vessel_type": 0.0
+        }
+
         count = 0
 
         it = tqdm(self._test_data_loader, mininterval=5.0, maxinterval=50.0)
@@ -179,14 +185,23 @@ class Trainer:
                 # Ensure batch[0] exists and has a size attribute
                 batch_size = batch[0].size(0)
 
-                total_losses["lat"] += loss.mae.lat_loss.item() * batch_size
-                total_losses["lon"] += loss.mae.lon_loss.item() * batch_size
-                total_losses["cog"] += loss.mae.cog_loss.item() * batch_size
-                total_losses["sog"] += loss.mae.sog_loss.item() * batch_size
-                total_losses["rot"] += loss.mae.rot_loss.item() * batch_size
-                total_losses["heading"] += loss.mae.heading_loss.item() * batch_size
-                total_losses["draught"] += loss.mae.draught_loss.item() * batch_size
-                total_losses["vessel_type"] += loss.mae.vessel_type_loss.item() * batch_size
+                total_losses_mae["lat"] += loss.mae.lat_loss.item() * batch_size
+                total_losses_mae["lon"] += loss.mae.lon_loss.item() * batch_size
+                total_losses_mae["cog"] += loss.mae.cog_loss.item() * batch_size
+                total_losses_mae["sog"] += loss.mae.sog_loss.item() * batch_size
+                total_losses_mae["rot"] += loss.mae.rot_loss.item() * batch_size
+                total_losses_mae["heading"] += loss.mae.heading_loss.item() * batch_size
+                total_losses_mae["draught"] += loss.mae.draught_loss.item() * batch_size
+                total_losses_mae["vessel_type"] += loss.mae.vessel_type_loss.item() * batch_size
+
+                total_losses_smape["lat"] += loss.smape.lat_loss.item() * batch_size
+                total_losses_smape["lon"] += loss.smape.lon_loss.item() * batch_size
+                total_losses_smape["cog"] += loss.smape.cog_loss.item() * batch_size
+                total_losses_smape["sog"] += loss.smape.sog_loss.item() * batch_size
+                total_losses_smape["rot"] += loss.smape.rot_loss.item() * batch_size
+                total_losses_smape["heading"] += loss.smape.heading_loss.item() * batch_size
+                total_losses_smape["draught"] += loss.smape.draught_loss.item() * batch_size
+                total_losses_smape["vessel_type"] += loss.smape.vessel_type_loss.item() * batch_size
 
                 count += batch_size
 
@@ -196,14 +211,15 @@ class Trainer:
 
         if count > 0:
             # 1. Calculate averages into a neat dictionary
-            avg_losses = {name: val / count for name, val in total_losses.items()}
+            avg_losses_mae = {name: val / count for name, val in total_losses_mae.items()}
+            avg_losses_smape = {name: val / count for name, val in total_losses_smape.items()}
 
             # 2. Log to TensorBoard
-            for name, avg_loss in avg_losses.items():
+            for name, avg_loss in avg_losses_mae.items():
                 self._writer.add_scalar(f"test/{name}", avg_loss, epoch_no)
 
             # 3. Print to Console
-            print(f"Test Epoch {epoch_no} Complete. Avg Lat Loss: {avg_losses['lat']:.4f}")
+            print(f"Test Epoch {epoch_no} Complete. Avg Lat Loss: {avg_losses_mae['lat']:.4f}")
 
             # 4. Write to File (CSV format is best for analysis later)
             dirpath = f"{self._cfg.output_dir}/test_logs"
@@ -216,9 +232,10 @@ class Trainer:
 
                 # If file is new, write the header row first
                 if not file_exists:
-                    headers = ["epoch"] + list(avg_losses.keys())
+                    headers = ["epoch"] + list(avg_losses_mae.keys()) + list(avg_losses_smape.keys())
                     writer.writerow(headers)
 
                 # Write the data row
-                row_data = [epoch_no] + [f"{val:.6f}" for val in avg_losses.values()]
+                row_data = [epoch_no] + [f"{val:.6f}" for val in avg_losses_mae.values()] + \
+                    [f"{val:.6f}" for val in avg_losses_smape.values()]
                 writer.writerow(row_data)
