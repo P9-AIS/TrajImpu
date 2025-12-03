@@ -158,15 +158,9 @@ class Trainer:
     def _run_test_batches(self, epoch_no: int):
         self._model.eval()
 
-        total_losses_mae = {
-            "lat": 0.0, "lon": 0.0, "cog": 0.0, "sog": 0.0,
-            "rot": 0.0, "heading": 0.0, "draught": 0.0, "vessel_type": 0.0
-        }
+        total_losses_mae = {"lat_mae": 0.0, "lon_mae": 0.0, "haversine_mae": 0.0}
 
-        total_losses_smape = {
-            "lat": 0.0, "lon": 0.0, "cog": 0.0, "sog": 0.0,
-            "rot": 0.0, "heading": 0.0, "draught": 0.0, "vessel_type": 0.0
-        }
+        total_losses_smape = {"lat_smape": 0.0, "lon_smape": 0.0, "haversine_smape": 0.0}
 
         count = 0
 
@@ -176,14 +170,15 @@ class Trainer:
             for batch in it:
                 loss, _ = self._model.forward(batch)
                 # Ensure batch[0] exists and has a size attribute
-                batch_size = batch[0].size(0)
+                batch_size = batch.observed_data.size(0)
 
-                total_losses_mae["lat"] += loss.mae.lat_loss.item() * batch_size
-                total_losses_mae["lon"] += loss.mae.lon_loss.item() * batch_size
+                total_losses_mae["lat_mae"] += loss.mae.lat_loss.item() * batch_size
+                total_losses_mae["lon_mae"] += loss.mae.lon_loss.item() * batch_size
+                total_losses_mae["haversine_mae"] += loss.mae.haversine_loss.item() * batch_size
 
-                total_losses_smape["lat"] += loss.smape.lat_loss.item() * batch_size
-                total_losses_smape["lon"] += loss.smape.lon_loss.item() * batch_size
-
+                total_losses_smape["lat_smape"] += loss.smape.lat_loss.item() * batch_size
+                total_losses_smape["lon_smape"] += loss.smape.lon_loss.item() * batch_size
+                total_losses_smape["haversine_smape"] += loss.smape.haversine_loss.item() * batch_size
                 count += batch_size
 
                 it.set_postfix({"epoch": epoch_no}, refresh=False)
@@ -200,7 +195,7 @@ class Trainer:
                 self._writer.add_scalar(f"test/{name}", avg_loss, epoch_no)
 
             # 3. Print to Console
-            print(f"Test Epoch {epoch_no} Complete. Avg Lat Loss: {avg_losses_mae['lat']:.4f}")
+            print(f"Test Epoch {epoch_no} Complete. Avg Haversine Loss: {avg_losses_mae['haversine_mae']:.4f}")
 
             # 4. Write to File (CSV format is best for analysis later)
             dirpath = f"{self._cfg.output_dir}/test_logs"

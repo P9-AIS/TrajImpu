@@ -13,8 +13,6 @@ class ContinuousEncoderTwo(nn.Module):
         )
 
     def forward(self, x, min_val, max_val):
-        missing_mask = torch.eq(x, -1)  # [b, s, 1]
-
         denominator = torch.clamp(max_val - min_val, min=1e-6)
         x_norm = 2 * (x - min_val) / denominator - 1
 
@@ -22,8 +20,6 @@ class ContinuousEncoderTwo(nn.Module):
 
         x_encoded = self.mlp(x_norm.view(-1, 1))  # [b*s, d_model_E]
         x_encoded = x_encoded.view(batch_size, seq_len, 1, -1)  # [b, s, 1, d_model_E]
-
-        x_encoded = x_encoded.masked_fill(missing_mask.unsqueeze(-1), 0.0)
 
         return x_encoded
 

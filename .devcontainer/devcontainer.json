@@ -24,7 +24,8 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-vsliveshare.vsliveshare"
+        "ms-vsliveshare.vsliveshare",
+        "phplasma.csv-to-table"
       ]
     }
   },

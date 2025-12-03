@@ -76,6 +76,10 @@ simpleCfg:
     dim_rnn_hidden: 128
     MIT: true
 
+encdecCfg:
+    device: "cuda:0"
+    dim_ais_attr_encoding: 32
+
 modelDataCfg:
   area: "string"
   num_workers: 30
