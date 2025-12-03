@@ -86,11 +86,14 @@ class HeterogeneousAttributeEncoder(nn.Module):
         tensor_input = ais_data
         b, s, _ = ais_data.shape  # [b, s, n]
 
-        lat_output = self.lat_continous_encoder(
-            tensor_input[:, :, AISColDict.NORTHERN_DELTA.value:AISColDict.NORTHERN_DELTA.value+1])
+        northern_deltas = tensor_input[:, :, AISColDict.NORTHERN_DELTA.value:AISColDict.NORTHERN_DELTA.value+1]
+        eastern_deltas = tensor_input[:, :, AISColDict.EASTERN_DELTA.value:AISColDict.EASTERN_DELTA.value+1]
 
-        lon_output = self.lon_continous_encoder(
-            tensor_input[:, :, AISColDict.EASTERN_DELTA.value:AISColDict.EASTERN_DELTA.value+1])
+        scaled_northern_deltas = (northern_deltas - self.stats.mean_lat) / self.stats.std_lat
+        scaled_eastern_deltas = (eastern_deltas - self.stats.mean_lon) / self.stats.std_lon
+
+        lat_output = self.lat_continous_encoder(scaled_northern_deltas)
+        lon_output = self.lon_continous_encoder(scaled_eastern_deltas)
 
         output = torch.cat((lat_output, lon_output), dim=2)  # shape [b, s, len(AISColDict), feature_dim]
         output = output.view(b, s, -1)  # shape [b, s, len(AISColDict)*feature_dim]

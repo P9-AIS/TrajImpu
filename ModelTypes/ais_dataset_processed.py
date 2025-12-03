@@ -39,19 +39,19 @@ class AISDatasetProcessed():
         lat_column = data[:, :, AISColDict.NORTHERN_DELTA.value]
         lon_column = data[:, :, AISColDict.EASTERN_DELTA.value]
 
-        min_lat = np.min(lat_column)
-        max_lat = np.max(lat_column)
-        min_lon = np.min(lon_column)
-        max_lon = np.max(lon_column)
+        mean_lat = np.mean(lat_column).item()
+        mean_lon = np.mean(lon_column).item()
+        std_lat = np.std(lat_column).item()
+        std_lon = np.std(lon_column).item()
 
         return AISStats(
             seq_len=seq_len,
             num_trajs=num_trajs,
             num_records=num_records,
-            min_lat=min_lat,
-            max_lat=max_lat,
-            min_lon=min_lon,
-            max_lon=max_lon,
+            mean_lat=mean_lat,
+            mean_lon=mean_lon,
+            std_lat=std_lat,
+            std_lon=std_lon,
         )
 
     def save(self, path: str):

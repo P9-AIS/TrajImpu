@@ -68,6 +68,9 @@ class HeterogeneousAttributeDecoder(nn.Module):
         lat_hat = self.lat_decoder(lat_encoding)
         lon_hat = self.lon_decoder(lon_encoding)
 
-        output = torch.cat([lat_hat, lon_hat], dim=-1)  # [b, s, num_ais_attr]
+        upscaled_northern_deltas = lat_hat * self.stats.std_lat + self.stats.mean_lat
+        upscaled_eastern_deltas = lon_hat * self.stats.std_lon + self.stats.mean_lon
+
+        output = torch.cat([upscaled_northern_deltas, upscaled_eastern_deltas], dim=-1)  # [b, s, num_ais_attr]
 
         return output
