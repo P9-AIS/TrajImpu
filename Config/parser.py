@@ -8,6 +8,7 @@ from ForceTypes.area import Area
 from ForceUtils.heatmap_generator import Config as HeatmapGeneratorConfig
 from ForceData.force_data_upload_handler_http import Config as ForceDataUploadHandlerConfig
 from Model.model import Config as ModelConfig
+from Model.simple import Config as SimpleCfg
 from ModelUtils.data_loader import Config as ModelDataLoaderConfig
 from ModelData.model_data_access_handler_csv import Config as ModelDataConfig
 from ModelUtils.data_processor import MaskingStrategy, Config as ModelProcessorConfig
@@ -24,6 +25,7 @@ class Config:
     heatmapGeneratorCfg: HeatmapGeneratorConfig
     forceDataUploadHandlerCfg: ForceDataUploadHandlerConfig
     modelCfg: ModelConfig
+    simpleCfg: SimpleCfg
     modelDataLoaderCfg: ModelDataLoaderConfig
     modelDataCfg: ModelDataConfig
     modelDataProcessorCfg: ModelProcessorConfig
@@ -45,6 +47,7 @@ def parse_config(path: str) -> Config:
         forceDataUploadHandlerCfg=ConfigVisitorRegistry.visit(
             ForceDataUploadHandlerConfig, cfg_dict["forceDataUploadHandlerCfg"]),
         modelCfg=ConfigVisitorRegistry.visit(ModelConfig, cfg_dict["modelCfg"]),
+        simpleCfg=ConfigVisitorRegistry.visit(SimpleCfg, cfg_dict["simpleCfg"]),
         modelDataLoaderCfg=ConfigVisitorRegistry.visit(ModelDataLoaderConfig, cfg_dict["modelDataLoaderCfg"]),
         modelDataCfg=ConfigVisitorRegistry.visit(ModelDataConfig, cfg_dict["modelDataCfg"]),
         modelDataProcessorCfg=ConfigVisitorRegistry.visit(ModelProcessorConfig, cfg_dict["modelDataProcessorCfg"]),
@@ -146,6 +149,11 @@ ConfigVisitorRegistry.register(
 ConfigVisitorRegistry.register(
     ModelConfig,
     lambda data: ModelConfig(**data)
+)
+
+ConfigVisitorRegistry.register(
+    SimpleCfg,
+    lambda data: SimpleCfg(**data)
 )
 
 ConfigVisitorRegistry.register(

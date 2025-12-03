@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
 import torch
+import torch.nn as nn
 from tqdm import tqdm
-from Model.model import Model
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from ModelData.i_model_data_upload_handler import IModelDataUploadHandler
@@ -29,7 +29,7 @@ class Trainer:
     _optimizer: torch.optim.Optimizer
     _upload_handler: IModelDataUploadHandler
 
-    def __init__(self, model: Model, train_data_loader: DataLoader, validation_data_loader: DataLoader, test_data_loader: DataLoader, upload_handler: IModelDataUploadHandler, config: Config):
+    def __init__(self, model: nn.Module, train_data_loader: DataLoader, validation_data_loader: DataLoader, test_data_loader: DataLoader, upload_handler: IModelDataUploadHandler, config: Config):
         self._writer = SummaryWriter(flush_secs=1)
         self._cfg = config
         self._train_data_loader = train_data_loader
