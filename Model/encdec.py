@@ -50,29 +50,3 @@ class Model(nn.Module):
         loss = self.loss_calculator.calculate_loss(decoded, observed)
 
         return loss, (lats, lons, true_lats, true_lons)
-
-    def update_lat_lon(self, lats: torch.Tensor, lons: torch.Tensor, eastern_deltas: torch.Tensor,
-                       northern_deltas: torch.Tensor, mask_indices: torch.Tensor, direction: str) -> None:
-        b, s = lats.size()
-        batch_idx = torch.arange(b, device=lats.device)
-        if direction == "forward":
-            prev_mask_indices = mask_indices - 1
-            lats_to_update = lats[batch_idx, prev_mask_indices]
-            lons_to_update = lons[batch_idx, prev_mask_indices]
-            E, N = GC.espg4326_to_epsg3034_batch_tensor(lons_to_update, lats_to_update)
-            E += eastern_deltas.squeeze(-1)
-            N += northern_deltas.squeeze(-1)
-            lons_updated, lats_updated = GC.epsg3034_to_espg4326_batch_tensor(E, N)
-            lats[batch_idx, mask_indices] = lats_updated
-            lons[batch_idx, mask_indices] = lons_updated
-
-        elif direction == "backward":
-            prev_mask_indices = mask_indices + 1
-            lats_to_update = lats[batch_idx, prev_mask_indices]
-            lons_to_update = lons[batch_idx, prev_mask_indices]
-            E, N = GC.espg4326_to_epsg3034_batch_tensor(lons_to_update, lats_to_update)
-            E -= eastern_deltas.squeeze(-1)
-            N -= northern_deltas.squeeze(-1)
-            lons_updated, lats_updated = GC.epsg3034_to_espg4326_batch_tensor(E, N)
-            lats[batch_idx, mask_indices] = lats_updated
-            lons[batch_idx, mask_indices] = lons_updated
