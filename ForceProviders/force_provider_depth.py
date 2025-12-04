@@ -98,8 +98,8 @@ class DepthForceProvider(IForceProvider):
 
         dz_dy, dz_dx = np.gradient(Z_transformed)
         grad_mag = np.sqrt(dz_dx**2 + dz_dy**2) + 1e-8
-        vx = -dz_dx / grad_mag * (1-Z_transformed)
-        vy = -dz_dy / grad_mag * (1-Z_transformed)
+        vx = dz_dx / grad_mag * (1-Z_transformed)
+        vy = dz_dy / grad_mag * (1-Z_transformed)
 
         return vx, vy
 

@@ -116,8 +116,8 @@ class TrafficForceProvider(IForceProvider):
 
         dy, dx = np.gradient(Z_transformed)
         grad_mag = np.sqrt(dx**2 + dy**2) + 1e-8
-        vx = -dx / grad_mag * (1 - Z_transformed)
-        vy = -dy / grad_mag * (1 - Z_transformed)
+        vx = dx / grad_mag * (1 - Z_transformed)
+        vy = dy / grad_mag * (1 - Z_transformed)
 
         return vx, vy
 
