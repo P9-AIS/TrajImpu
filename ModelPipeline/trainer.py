@@ -61,7 +61,7 @@ class Trainer:
             if average_train_loss < best_train_loss:
                 best_train_loss = average_train_loss
 
-            if epoch % self._cfg.validation_every_n_epochs == 0 and epoch != 0:
+            if (epoch + 1) % self._cfg.validation_every_n_epochs == 0 and epoch != 0:
                 average_validation_loss = self._run_validation_batches(epoch)
 
                 self._run_test_batches(epoch)
