@@ -9,12 +9,14 @@ from ModelUtils.data_loader import AisDataLoader
 from ModelUtils.data_processor import DataProcessor
 from ModelUtils.loss_calculator import LossCalculator
 from ModelData.model_data_upload_handler_http import ModelDataUploadHandlerHTTP
+from ModelData.model_data_upload_handler_mock import ModelDataUploadHandlerMock
 
 
 if __name__ == "__main__":
     cfg = parse_config("config.yaml")
 
-    upload_handler = ModelDataUploadHandlerHTTP(cfg.modelDataUploadHandlerCfg)
+    # upload_handler = ModelDataUploadHandlerHTTP(cfg.modelDataUploadHandlerCfg)
+    upload_handler = ModelDataUploadHandlerMock()
 
     force_data_connection = PostgresConnection(cfg.postgresCfg)
     force_data_handler = ForceDataAccessHandlerDb(force_data_connection)
@@ -25,7 +27,7 @@ if __name__ == "__main__":
     data_loader = AisDataLoader(data_processor, cfg.modelDataLoaderCfg)
     train_data_loader, valtest_data_loader, test_data_loader, stats = data_loader.get_data_loaders()
     loss_calculator = LossCalculator()
-    model = Model(stats, [force_provider_depth], loss_calculator, cfg.modelCfg)
+    model = Model(stats, force_provider_depth, loss_calculator, cfg.modelCfg)
 
     model = model.to(cfg.modelCfg.device)
 

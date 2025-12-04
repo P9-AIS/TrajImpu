@@ -10,10 +10,10 @@
             "justMyCode": true
         },
         {
-            "name": "Python Debugger: train (CUDA debug)",
+            "name": "Python Debugger: train model (CUDA debug)",
             "type": "debugpy",
             "request": "launch",
-            "module": "src.train",
+            "module": "src.train_model",
             "console": "integratedTerminal",
             "justMyCode": true,
             "env": {

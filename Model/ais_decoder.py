@@ -60,7 +60,7 @@ class HeterogeneousAttributeDecoder(nn.Module):
 
     def forward(self, ais_data: torch.Tensor) -> torch.Tensor:
         b, s, f = ais_data.shape
-        af = f // len(AISColDict)
+        af = f // 2
 
         lat_encoding = ais_data[:, :, AISColDict.NORTHERN_DELTA.value*af: (AISColDict.NORTHERN_DELTA.value+1)*af]
         lon_encoding = ais_data[:, :, AISColDict.EASTERN_DELTA.value*af: (AISColDict.EASTERN_DELTA.value+1)*af]

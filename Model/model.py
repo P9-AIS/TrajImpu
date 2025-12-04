@@ -3,7 +3,7 @@ import torch.nn as nn
 from dataclasses import dataclass
 from ForceProviders.i_force_provider import IForceProvider
 from Model.ais_encoder import HeterogeneousAttributeEncoder
-from Model.afa_module import AFAModule
+from Model.force_module import ForceModule
 from Model.brits import BRITS
 from Model.ais_decoder import HeterogeneousAttributeDecoder
 from ModelTypes.ais_col_dict import AISColDict
@@ -31,20 +31,20 @@ class Config:
 
 
 class Model(nn.Module):
-    def __init__(self, dataset_stats: AISStats, force_providers: list[IForceProvider],
+    def __init__(self, dataset_stats: AISStats, force_provider: IForceProvider,
                  loss_calculator: LossCalculator, cfg: Config):
 
         super().__init__()
         self._cfg = cfg
 
         self.ais_encoder = HeterogeneousAttributeEncoder(cfg.dim_ais_attr_encoding, dataset_stats).to(cfg.device)
+        self.force_module = ForceModule(cfg.dim_ais_attr_encoding, force_provider).to(cfg.device)
 
         self.ais_encoding_dim = self.ais_encoder.output_dim
-
-        self.afa_module = AFAModule(self.ais_encoding_dim, cfg.num_head, *force_providers).to(cfg.device)
+        self.force_module_output_dim = self.ais_encoding_dim + cfg.dim_ais_attr_encoding
 
         self.impu_module = BRITS(
-            dataset_stats.seq_len, self.ais_encoding_dim,
+            dataset_stats.seq_len, self.force_module_output_dim,
             cfg.dim_rnn_hidden, MIT=cfg.MIT, device=cfg.device
         ).to(cfg.device)
 
@@ -62,14 +62,26 @@ class Model(nn.Module):
         lons = true_lons.clone().contiguous().to(self._cfg.device)
         timestamps = ais_batch.observed_timestamps.contiguous().to(self._cfg.device)
         observed = ais_batch.observed_data.contiguous().to(self._cfg.device)
+
         masks = ais_batch.masks.to(self._cfg.device)
-        fine_masks = torch.repeat_interleave(masks, self._cfg.dim_ais_attr_encoding, dim=2).detach()
+        mask_north = masks[:, :, AISColDict.NORTHERN_DELTA.value].unsqueeze(-1)
+        mask_east = masks[:, :, AISColDict.EASTERN_DELTA.value].unsqueeze(-1)
+        mask_force_base = mask_north * mask_east
+        fine_mask_force = mask_force_base.repeat(1, 1, self._cfg.dim_ais_attr_encoding)
+        fine_mask_north = mask_north.repeat(1, 1, self._cfg.dim_ais_attr_encoding)
+        fine_mask_east = mask_east.repeat(1, 1, self._cfg.dim_ais_attr_encoding)
+        fine_masks = torch.cat([
+            fine_mask_north,
+            fine_mask_east,
+            fine_mask_force
+        ], dim=-1).detach()
 
         all_decoded = []
         all_truth = []
 
         encoded = self.ais_encoder(observed)
-        features, _ = self.afa_module(lats, lons, encoded)
+        features = self.force_module(lats, lons, encoded)  # shape [b, s, e * 3]
+
         b, s, f = features.size()
 
         assert ais_batch.num_missing_values % 2 == 0, "Number of missing values must be even."
@@ -78,7 +90,7 @@ class Model(nn.Module):
 
             brits_data = _prepare_brits_data(timestamps, features, fine_masks)
 
-            imputed = self.impu_module(brits_data, stage="test")["imputed_data"]
+            imputed = self.impu_module(brits_data, stage="test")["imputed_data"][:, :, :self.ais_encoding_dim]
 
             # find first missing timestep per batch
             first_mask_idx = (fine_masks == 0).any(dim=2).float().argmax(dim=1)
@@ -120,6 +132,7 @@ class Model(nn.Module):
             # decode
             first_decoded = self.ais_decoder(first_input)
             last_decoded = self.ais_decoder(last_input)
+
             eastern_deltas_first = first_decoded[batch_idx, :, AISColDict.EASTERN_DELTA.value].detach()
             northern_deltas_first = first_decoded[batch_idx, :, AISColDict.NORTHERN_DELTA.value].detach()
             eastern_deltas_last = last_decoded[batch_idx, :, AISColDict.EASTERN_DELTA.value].detach()
@@ -137,13 +150,13 @@ class Model(nn.Module):
             last_lat = lats[batch_idx, last_mask_idx]
             last_lon = lons[batch_idx, last_mask_idx]
 
-            first_features, _ = self.afa_module(
+            first_features = self.force_module(
                 first_lat.unsqueeze(1),
                 first_lon.unsqueeze(1),
                 first_input
             )
 
-            last_features, _ = self.afa_module(
+            last_features = self.force_module(
                 last_lat.unsqueeze(1),
                 last_lon.unsqueeze(1),
                 last_input

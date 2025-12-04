@@ -6,12 +6,14 @@ from ModelUtils.data_loader import AisDataLoader
 from ModelUtils.data_processor import DataProcessor
 from ModelUtils.loss_calculator import LossCalculator
 from ModelData.model_data_upload_handler_http import ModelDataUploadHandlerHTTP
+from ModelData.model_data_upload_handler_mock import ModelDataUploadHandlerMock
 
 
 if __name__ == "__main__":
     cfg = parse_config("config.yaml")
 
-    upload_handler = ModelDataUploadHandlerHTTP(cfg.modelDataUploadHandlerCfg)
+    # upload_handler = ModelDataUploadHandlerHTTP(cfg.modelDataUploadHandlerCfg)
+    upload_handler = ModelDataUploadHandlerMock()
 
     data_handler = ModelDataAccessHandlerCSV(cfg.modelDataCfg)
     data_processor = DataProcessor(data_handler, cfg.modelDataProcessorCfg)

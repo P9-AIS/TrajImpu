@@ -123,7 +123,6 @@ class DepthForceProvider(IForceProvider):
         return Vec3(x_force, y_force, 0.0)
 
     def get_forces(self, vals: torch.Tensor) -> torch.Tensor:
-        # vals: [b*s, num_ais_attr]
         b, s, _ = vals.shape
         forces = []
 
@@ -133,7 +132,7 @@ class DepthForceProvider(IForceProvider):
                 lat = vals[i, j, 0].item()
                 lon = vals[i, j, 1].item()
                 force_vec = self.get_force(Params(lon=lon, lat=lat))
-                batch_forces.append([force_vec.x, force_vec.y, force_vec.z])
+                batch_forces.append([force_vec.x, force_vec.y])
             forces.append(batch_forces)
 
-        return torch.tensor(forces, dtype=torch.float32)  # shape [b, s, 3]
+        return torch.tensor(forces, dtype=torch.float32)  # shape [b, s, 2]
