@@ -94,7 +94,7 @@ class Model(nn.Module):
 
             # find first missing timestep per batch
             first_mask_idx = (fine_masks == 0).any(dim=2).float().argmax(dim=1)
-            last_mask_idx = (fine_masks == 0).flip(dims=[1]).any(dim=2).float().argmax(dim=1)
+            last_mask_idx = s - 1 - (fine_masks == 0).flip(dims=[1]).any(dim=2).float().argmax(dim=1)
 
             batch_idx = torch.arange(b, device=imputed.device)
 
