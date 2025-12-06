@@ -73,7 +73,7 @@ class Model(nn.Module):
 
             # find first missing timestep per batch
             first_mask_idx = (fine_masks == 0).any(dim=2).float().argmax(dim=1)
-            last_mask_idx = (fine_masks == 0).flip(dims=[1]).any(dim=2).float().argmax(dim=1)
+            last_mask_idx = s - 1 - (fine_masks == 0).flip(dims=[1]).any(dim=2).float().argmax(dim=1)
 
             batch_idx = torch.arange(b, device=imputed.device)
 
@@ -175,11 +175,6 @@ class Model(nn.Module):
 
 
 def _prepare_brits_data(timestamps, encoded_data, masks):
-    """
-    IMPORTANT:
-    - encoded_data must NOT be detached (BRITS must learn from it)
-    - masks/deltas can be detached or not; they don't need gradients
-    """
     b, s, f = encoded_data.size()
 
     def compute_deltas(ts, ms):
@@ -195,7 +190,7 @@ def _prepare_brits_data(timestamps, encoded_data, masks):
 
     forward_deltas = compute_deltas(timestamps, masks)
     flipped_masks = torch.flip(masks, [1])
-    backward_deltas = compute_deltas(torch.flip(timestamps, [1]), flipped_masks)
+    backward_deltas = torch.abs(compute_deltas(torch.flip(timestamps, [1]), flipped_masks))
 
     return {
         "forward": {
