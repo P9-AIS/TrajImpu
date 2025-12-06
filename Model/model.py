@@ -229,7 +229,7 @@ def _prepare_brits_data(timestamps, encoded_data, masks):
 
     forward_deltas = compute_deltas(timestamps, masks)
     flipped_masks = torch.flip(masks, [1])
-    backward_deltas = compute_deltas(torch.flip(timestamps, [1]), flipped_masks)
+    backward_deltas = torch.abs(compute_deltas(torch.flip(timestamps, [1]), flipped_masks))
 
     return {
         "forward": {
