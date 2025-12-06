@@ -37,7 +37,7 @@ class AISDatasetMasked(Dataset[AISBatch]):
     def __getitem__(self, idx) -> AISBatch:
         return AISBatch(
             observed_data=torch.tensor(self.data[idx], dtype=torch.float32),  # [maxlen, n]
-            observed_timestamps=torch.tensor(self.timestamps[idx], dtype=torch.int32),  # [maxlen]
+            observed_timestamps=torch.tensor(self.timestamps[idx], dtype=torch.int32, requires_grad=False),  # [maxlen]
             masks=torch.tensor(self.masks[idx], dtype=torch.int8, requires_grad=False),  # [maxlen, n]
             num_missing_values=self.num_masked_values,  # scalar
             num_values_in_sequence=self.num_values_in_sequence,  # scalar

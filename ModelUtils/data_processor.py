@@ -119,12 +119,12 @@ class DataProcessor:
 
         filtered_trajectories = self._filter_trajectories_forces(initial_trajectories, self._depth_force_provider)
 
-        trajectories = np.array(filtered_trajectories, dtype=np.float32)
+        trajectories = np.array(filtered_trajectories, dtype=np.float64)
 
         delta_E, delta_N = DataProcessor.get_deltas(trajectories)
 
         trajectories = np.concatenate(
-            (trajectories, delta_N[:, :, np.newaxis], delta_E[:, :, np.newaxis]), axis=2, dtype=np.float32)
+            (trajectories, delta_N[:, :, np.newaxis], delta_E[:, :, np.newaxis]), axis=2, dtype=np.float64)
 
         return trajectories
 
