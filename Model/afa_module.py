@@ -49,7 +49,7 @@ class AFAModule(nn.Module):
 
         all_forces = torch.empty(b, s, num_forces, 3, device=lats.device)
         for i, provider in enumerate(self._force_providers):
-            forces = provider.get_forces(lat_lons)
+            forces = provider.get_forces_tensor(lat_lons)
             all_forces[:, :, i, :] = forces
 
         return all_forces

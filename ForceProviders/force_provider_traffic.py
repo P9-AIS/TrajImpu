@@ -135,7 +135,7 @@ class TrafficForceProvider(IForceProvider):
 
         return Vec3(x_force, y_force, 0.0)
 
-    def get_forces(self, vals: torch.Tensor) -> torch.Tensor:
+    def get_forces_tensor(self, vals: torch.Tensor) -> torch.Tensor:
         # vals: [b, s, num_ais_attr]
         b, s, _ = vals.shape
         forces = []
@@ -150,3 +150,18 @@ class TrafficForceProvider(IForceProvider):
             forces.append(batch_forces)
 
         return torch.tensor(forces, dtype=torch.float32)  # shape [b, s, 3]
+
+    def get_forces_np(self, vals: np.ndarray) -> np.ndarray:
+        b, s, _ = vals.shape
+        forces = []
+
+        for i in range(b):
+            batch_forces = []
+            for j in range(s):
+                lat = vals[i, j, 0]
+                lon = vals[i, j, 1]
+                force_vec = self.get_force(Params(lon=lon, lat=lat))
+                batch_forces.append([force_vec.x, force_vec.y])
+            forces.append(batch_forces)
+
+        return np.array(forces, dtype=np.float32)  # shape [b, s, 2]

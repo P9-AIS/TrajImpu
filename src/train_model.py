@@ -15,15 +15,15 @@ from ModelData.model_data_upload_handler_mock import ModelDataUploadHandlerMock
 if __name__ == "__main__":
     cfg = parse_config("config.yaml")
 
-    # upload_handler = ModelDataUploadHandlerHTTP(cfg.modelDataUploadHandlerCfg)
-    upload_handler = ModelDataUploadHandlerMock()
+    upload_handler = ModelDataUploadHandlerHTTP(cfg.modelDataUploadHandlerCfg)
+    # upload_handler = ModelDataUploadHandlerMock()
 
     force_data_connection = PostgresConnection(cfg.postgresCfg)
     force_data_handler = ForceDataAccessHandlerDb(force_data_connection)
     force_provider_depth = DepthForceProvider(force_data_handler, cfg.depthForceProviderCfg)
 
     data_handler = ModelDataAccessHandlerCSV(cfg.modelDataCfg)
-    data_processor = DataProcessor(data_handler, cfg.modelDataProcessorCfg)
+    data_processor = DataProcessor(data_handler, force_provider_depth, cfg.modelDataProcessorCfg)
     data_loader = AisDataLoader(data_processor, cfg.modelDataLoaderCfg)
     train_data_loader, valtest_data_loader, test_data_loader, stats = data_loader.get_data_loaders()
     loss_calculator = LossCalculator()

@@ -214,11 +214,6 @@ class Model(nn.Module):
 
 
 def _prepare_brits_data(timestamps, encoded_data, masks):
-    """
-    IMPORTANT:
-    - encoded_data must NOT be detached (BRITS must learn from it)
-    - masks/deltas can be detached or not; they don't need gradients
-    """
     b, s, f = encoded_data.size()
 
     def compute_deltas(ts, ms):
