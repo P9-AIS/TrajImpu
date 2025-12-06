@@ -30,8 +30,12 @@ class Trainer:
     _upload_handler: IModelDataUploadHandler
 
     def __init__(self, model: nn.Module, train_data_loader: DataLoader, validation_data_loader: DataLoader, test_data_loader: DataLoader, upload_handler: IModelDataUploadHandler, config: Config):
-        self._writer = SummaryWriter(flush_secs=1)
         self._cfg = config
+
+        self._run_name = f"run_{model}_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        log_dir = os.path.join(self._cfg.output_dir, "tensorboard_logs", self._run_name)
+        self._writer = SummaryWriter(log_dir=log_dir, flush_secs=1)
+
         self._train_data_loader = train_data_loader
         self._validation_data_loader = validation_data_loader
         self._test_data_loader = test_data_loader
@@ -44,8 +48,6 @@ class Trainer:
         self._global_validation_step = 0
         self._global_test_step = 0
         self._global_upload_step = 0
-
-        self._run_name = f"run_{model}_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     def train(self):
         print("Training the model...")
@@ -98,6 +100,10 @@ class Trainer:
                 self._writer.add_scalar("train/lat", loss.mae.lat_loss.item(), self._global_training_step)
                 self._writer.add_scalar("train/lon", loss.mae.lon_loss.item(), self._global_training_step)
                 self._writer.add_scalar("train/haversine", loss.mae.haversine_loss.item(),
+                                        self._global_training_step)
+                self._writer.add_scalar("train/consistency", loss.mae.consistency_loss.item(),
+                                        self._global_training_step)
+                self._writer.add_scalar("train/force", loss.mae.force_loss.item(),
                                         self._global_training_step)
 
                 total_loss += loss.mse.total_loss.item()

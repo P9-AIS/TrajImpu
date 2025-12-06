@@ -15,8 +15,8 @@ from ModelData.model_data_upload_handler_mock import ModelDataUploadHandlerMock
 if __name__ == "__main__":
     cfg = parse_config("config.yaml")
 
-    upload_handler = ModelDataUploadHandlerHTTP(cfg.modelDataUploadHandlerCfg)
-    # upload_handler = ModelDataUploadHandlerMock()
+    # upload_handler = ModelDataUploadHandlerHTTP(cfg.modelDataUploadHandlerCfg)
+    upload_handler = ModelDataUploadHandlerMock()
 
     force_data_connection = PostgresConnection(cfg.postgresCfg)
     force_data_handler = ForceDataAccessHandlerDb(force_data_connection)

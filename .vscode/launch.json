@@ -22,6 +22,18 @@
             }
         },
         {
+            "name": "Python Debugger: train simple (CUDA debug)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.train_simple",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "CUDA_LAUNCH_BLOCKING": "1",
+                "TORCH_USE_CUDA_DSA": "1"
+            }
+        },
+        {
             "name": "Python Debugger: train encdec (CUDA debug)",
             "type": "debugpy",
             "request": "launch",

@@ -3,7 +3,8 @@ import torch.nn as nn
 from dataclasses import dataclass
 from ForceProviders.i_force_provider import IForceProvider
 from Model.ais_encoder import HeterogeneousAttributeEncoder
-from Model.force_module import ForceModule
+from Model.force_decoder import ForceDecoder
+from Model.force_encoder import ForceEncoder
 from Model.brits import BRITS
 from Model.ais_decoder import HeterogeneousAttributeDecoder
 from ModelTypes.ais_col_dict import AISColDict
@@ -38,22 +39,24 @@ class Model(nn.Module):
         self._cfg = cfg
 
         self.ais_encoder = HeterogeneousAttributeEncoder(cfg.dim_ais_attr_encoding, dataset_stats).to(cfg.device)
-        self.force_module = ForceModule(cfg.dim_ais_attr_encoding, force_provider).to(cfg.device)
+        self.force_encoder = ForceEncoder(cfg.dim_ais_attr_encoding, force_provider).to(cfg.device)
 
         self.ais_encoding_dim = self.ais_encoder.output_dim
-        self.force_module_output_dim = self.ais_encoding_dim + cfg.dim_ais_attr_encoding
+        self.force_encoding_dim = cfg.dim_ais_attr_encoding
+        self.feature_encoding_dim = self.ais_encoding_dim + self.force_encoding_dim
 
         self.impu_module = BRITS(
-            dataset_stats.seq_len, self.force_module_output_dim,
+            dataset_stats.seq_len, self.feature_encoding_dim,
             cfg.dim_rnn_hidden, MIT=cfg.MIT, device=cfg.device
         ).to(cfg.device)
 
         self.ais_decoder = HeterogeneousAttributeDecoder(self.ais_encoding_dim, dataset_stats).to(cfg.device)
+        self.force_decoder = ForceDecoder(self.force_encoding_dim).to(cfg.device)
 
         self.loss_calculator = loss_calculator
 
     def __str__(self):
-        return "afa_model"
+        return "force_model"
 
     def forward(self, ais_batch: AISBatch) -> tuple[LossTypes, tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
         true_lats = ais_batch.lats.to(self._cfg.device)
@@ -80,9 +83,11 @@ class Model(nn.Module):
         all_truth = []
 
         encoded = self.ais_encoder(observed)
-        features = self.force_module(lats, lons, encoded)  # shape [b, s, e * 3]
+        forces, true_forces = self.force_encoder(lats, lons)
+        features = torch.cat((encoded, forces), dim=-1)  # shape [b, s, e * 3]
 
         b, s, f = features.size()
+        total_consistency_loss = torch.tensor(0.0, device=self._cfg.device)
 
         assert ais_batch.num_missing_values % 2 == 0, "Number of missing values must be even."
 
@@ -90,7 +95,9 @@ class Model(nn.Module):
 
             brits_data = _prepare_brits_data(timestamps, features, fine_masks)
 
-            imputed = self.impu_module(brits_data, stage="test")["imputed_data"][:, :, :self.ais_encoding_dim]
+            brits_ret = self.impu_module(brits_data, stage="test")
+            imputed = brits_ret["imputed_data"][:, :, :self.ais_encoding_dim]
+            total_consistency_loss += brits_ret["consistency_loss"]
 
             # find first missing timestep per batch
             first_mask_idx = (fine_masks == 0).any(dim=2).float().argmax(dim=1)
@@ -150,17 +157,11 @@ class Model(nn.Module):
             last_lat = lats[batch_idx, last_mask_idx]
             last_lon = lons[batch_idx, last_mask_idx]
 
-            first_features = self.force_module(
-                first_lat.unsqueeze(1),
-                first_lon.unsqueeze(1),
-                first_input
-            )
+            first_forces, _ = self.force_encoder(first_lat.unsqueeze(1), first_lon.unsqueeze(1))
+            last_forces, _ = self.force_encoder(last_lat.unsqueeze(1), last_lon.unsqueeze(1))
 
-            last_features = self.force_module(
-                last_lat.unsqueeze(1),
-                last_lon.unsqueeze(1),
-                last_input
-            )
+            first_features = torch.cat((first_encoded, first_forces), dim=-1)
+            last_features = torch.cat((last_encoded, last_forces), dim=-1)
 
             # update encoded sequence with NEW ground truth / imputed value
             first_scatter_index = first_mask_idx.view(-1, 1, 1).expand(-1, 1, f)
@@ -182,7 +183,10 @@ class Model(nn.Module):
         all_decoded_tensor = torch.cat(all_decoded, dim=1)
         all_truth_tensor = torch.cat(all_truth, dim=1)
 
-        loss = self.loss_calculator.calculate_loss(all_decoded_tensor, all_truth_tensor)
+        decoded_forces = self.force_decoder(forces)
+
+        loss = self.loss_calculator.calculate_loss(
+            all_decoded_tensor, all_truth_tensor, total_consistency_loss, decoded_forces, true_forces)
 
         return loss, (lats, lons, true_lats, true_lons)
 

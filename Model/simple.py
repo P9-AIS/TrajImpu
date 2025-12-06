@@ -63,13 +63,17 @@ class Model(nn.Module):
         encoded = self.ais_encoder(observed)
         b, s, f = encoded.size()
 
+        total_consistency_loss = torch.tensor(0.0, device=self._cfg.device)
+
         assert ais_batch.num_missing_values % 2 == 0, "Number of missing values must be even."
 
         for i in range(ais_batch.num_missing_values // 2):
 
             brits_data = _prepare_brits_data(timestamps, encoded, fine_masks)
 
-            imputed = self.impu_module(brits_data, stage="test")["imputed_data"]
+            brits_ret = self.impu_module(brits_data, stage="test")
+            imputed = brits_ret["imputed_data"][:, :, :self.ais_encoding_dim]
+            total_consistency_loss += brits_ret["consistency_loss"]
 
             # find first missing timestep per batch
             first_mask_idx = (fine_masks == 0).any(dim=2).float().argmax(dim=1)
@@ -143,7 +147,11 @@ class Model(nn.Module):
         all_decoded_tensor = torch.cat(all_decoded, dim=1)
         all_truth_tensor = torch.cat(all_truth, dim=1)
 
-        loss = self.loss_calculator.calculate_loss(all_decoded_tensor, all_truth_tensor)
+        force_pred = torch.zeros(1, device=all_decoded_tensor.device)
+        force_true = torch.zeros(1, device=all_truth_tensor.device)
+
+        loss = self.loss_calculator.calculate_loss(
+            all_decoded_tensor, all_truth_tensor, total_consistency_loss, force_pred, force_true)
 
         return loss, (lats, lons, true_lats, true_lons)
 

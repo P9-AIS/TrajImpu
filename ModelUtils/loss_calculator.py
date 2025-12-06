@@ -9,12 +9,15 @@ class LossOutput:
     lat_loss: torch.Tensor
     lon_loss: torch.Tensor
     haversine_loss: torch.Tensor
+    consistency_loss: torch.Tensor
+    force_loss: torch.Tensor
 
     def __str__(self) -> str:
         return (f"Total Loss: {self.total_loss.item():.4f}\n"
                 f"Lat Loss: {self.lat_loss.item():.4f}\n"
                 f"Lon Loss: {self.lon_loss.item():.4f}\n"
-                f"Haversine Loss: {self.haversine_loss.item():.4f}")
+                f"Haversine Loss: {self.haversine_loss.item():.4f}\n"
+                f"Consistency Loss: {self.consistency_loss.item():.4f}")
 
 
 @dataclass
@@ -27,7 +30,7 @@ class LossTypes:
 class LossCalculator:
 
     @staticmethod
-    def get_loss_type(loss_type: str, prediction, truth) -> LossOutput:
+    def get_loss_type(loss_type: str, prediction, truth, total_consistency_loss: torch.Tensor, decoded_forces: torch.Tensor, true_forces: torch.Tensor) -> LossOutput:
 
         lat_loss = LossCalculator.get_loss(
             loss_type,
@@ -45,13 +48,20 @@ class LossCalculator:
             prediction[:, :, AISColDict.EASTERN_DELTA.value],
             truth[:, :, AISColDict.EASTERN_DELTA.value])
 
-        total_loss = (lat_loss + lon_loss)
+        force_loss = LossCalculator.get_loss(
+            loss_type,
+            decoded_forces,
+            true_forces)
+
+        total_loss = lat_loss + lon_loss + 1000 * total_consistency_loss + 10 * force_loss
 
         return LossOutput(
             total_loss=total_loss,
             lat_loss=lat_loss,
             lon_loss=lon_loss,
-            haversine_loss=haversine_loss
+            haversine_loss=haversine_loss,
+            consistency_loss=total_consistency_loss,
+            force_loss=force_loss
         )
 
     @staticmethod
@@ -70,11 +80,12 @@ class LossCalculator:
         else:
             raise ValueError(f"Unsupported loss function: {loss_func}")
 
-    def calculate_loss(self, imputed: torch.Tensor, ground_truth: torch.Tensor) -> LossTypes:
+    def calculate_loss(self, imputed: torch.Tensor, ground_truth: torch.Tensor, total_consistency_loss: torch.Tensor, decoded_forces: torch.Tensor, true_forces: torch.Tensor) -> LossTypes:
         return LossTypes(
-            mse=self.get_loss_type("mse", imputed, ground_truth),
-            mae=self.get_loss_type("mae", imputed, ground_truth),
-            smape=self.get_loss_type("smape", imputed, ground_truth)
+            mse=self.get_loss_type("mse", imputed, ground_truth, total_consistency_loss, decoded_forces, true_forces),
+            mae=self.get_loss_type("mae", imputed, ground_truth, total_consistency_loss, decoded_forces, true_forces),
+            smape=self.get_loss_type("smape", imputed, ground_truth,
+                                     total_consistency_loss, decoded_forces, true_forces)
         )
 
     @staticmethod
