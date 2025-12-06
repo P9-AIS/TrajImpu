@@ -63,7 +63,7 @@ class GeoConverter:
         transformed = GeoConverter._from_espg4326.transform(catted[:, 0], catted[:, 1])
         ES = transformed[0].reshape(lon_cpu.shape)
         NS = transformed[1].reshape(lat_cpu.shape)
-        return torch.tensor(ES, dtype=torch.float).to(lon.device), torch.tensor(NS, dtype=torch.float).to(lat.device)
+        return torch.tensor(ES, dtype=torch.double).to(lon.device), torch.tensor(NS, dtype=torch.double).to(lat.device)
 
     @staticmethod
     def epsg3034_to_espg4326_batch_tensor(E: torch.Tensor, N: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
