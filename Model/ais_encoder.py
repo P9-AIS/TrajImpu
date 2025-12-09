@@ -89,8 +89,8 @@ class HeterogeneousAttributeEncoder(nn.Module):
         northern_deltas = tensor_input[:, :, AISColDict.NORTHERN_DELTA.value:AISColDict.NORTHERN_DELTA.value+1]
         eastern_deltas = tensor_input[:, :, AISColDict.EASTERN_DELTA.value:AISColDict.EASTERN_DELTA.value+1]
 
-        scaled_northern_deltas = (northern_deltas - self.stats.mean_lat) / self.stats.std_lat
-        scaled_eastern_deltas = (eastern_deltas - self.stats.mean_lon) / self.stats.std_lon
+        scaled_northern_deltas = (northern_deltas - self.stats.mean_abs_delta_n) / self.stats.std_delta_n
+        scaled_eastern_deltas = (eastern_deltas - self.stats.mean_abs_delta_e) / self.stats.std_delta_e
 
         lat_output = self.lat_continous_encoder(scaled_northern_deltas)
         lon_output = self.lon_continous_encoder(scaled_eastern_deltas)

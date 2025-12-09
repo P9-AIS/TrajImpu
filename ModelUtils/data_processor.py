@@ -14,8 +14,10 @@ import datetime as dt
 import numpy as np
 from enum import Enum
 from dataclasses import dataclass
+from ModelTypes.ais_stats import AISStats
 from ModelUtils.geo_utils import GeoUtils
 from ForceUtils.geo_converter import GeoConverter as gc
+import matplotlib.pyplot as plt
 
 
 class MaskingStrategy(Enum):
@@ -63,10 +65,137 @@ class DataProcessor:
         print("Generating masks for processed data...")
         masks = self._get_masks(processed_data)
 
-        masked_data = AISDatasetMasked.from_ais_dataset_processed(
-            processed_data, masks, self._num_masked_values, self._cfg.traj_len)
+        print("Calculating statistics for processed data...")
+        stats = self._get_stats(processed_data.data, processed_data.timestamps, masks)
+        print(stats)
+
+        masked_data = AISDatasetMasked.from_ais_dataset_processed(processed_data, masks, stats)
 
         return masked_data
+
+    def _get_stats(self, data: np.ndarray, timestamps: np.ndarray, masks: np.ndarray) -> AISStats:
+        seq_len = data.shape[1]
+        num_trajs = data.shape[0]
+        num_records = data.shape[0] * data.shape[1]
+
+        delta_n_col = data[:, :, AISColDict.NORTHERN_DELTA.value]
+        delta_e_col = data[:, :, AISColDict.EASTERN_DELTA.value]
+
+        mean_delta_n = np.mean(np.abs(delta_n_col)).item()
+        mean_delta_e = np.mean(np.abs(delta_e_col)).item()
+        std_delta_n = np.std(delta_n_col).item()
+        std_delta_e = np.std(delta_e_col).item()
+
+        mags = np.hypot(delta_n_col[:, 1:], delta_e_col[:, 1:])
+
+        min_dist = float(np.min(mags).item())
+        max_dist = float(np.max(mags).item())
+        mean_dist = np.mean(mags).item()
+        std_dist = np.std(mags).item()
+
+        ############################################################
+
+        traj_mags = np.sum(mags, axis=1)
+        min_traj_len = float(np.min(traj_mags).item())
+        max_traj_len = float(np.max(traj_mags).item())
+        mean_traj_len = float(np.mean(traj_mags).item())
+        std_traj_len = float(np.std(traj_mags).item())
+
+        self._output_stats_histogram(traj_mags, dir_path=f"Outputs/Stats", filename="trajectory_lengths_histogram.png",
+                                     title="Histogram of Trajectory Lengths", xlabel="Trajectory Length (m)", ylabel="Count")
+
+        masked_mags = np.sum(self._get_masked_mags(mags, masks[:, 1:, :]), axis=1)
+        min_masked_len = float(np.min(masked_mags).item())
+        max_masked_len = float(np.max(masked_mags).item())
+        mean_masked_len = float(np.mean(masked_mags).item())
+        std_masked_len = float(np.std(masked_mags).item())
+
+        self._output_stats_histogram(masked_mags, dir_path=f"Outputs/Stats", filename="trajectory_masked_lengths_histogram.png",
+                                     title="Histogram of Trajectory Masked Lengths", xlabel="Trajectory Masked Length", ylabel="Count")
+
+        ############################################################
+
+        timestep_diffs = timestamps[:, 1:] - timestamps[:, :-1]
+
+        min_duration = float(np.min(timestep_diffs).item())
+        max_duration = float(np.max(timestep_diffs).item())
+        mean_duration = float(np.mean(timestep_diffs).item())
+        std_duration = float(np.std(timestep_diffs).item())
+
+        traj_durations = np.sum(timestep_diffs, axis=1)
+        min_traj_duration = float(np.min(traj_durations).item())
+        max_traj_duration = float(np.max(traj_durations).item())
+        mean_traj_duration = float(np.mean(traj_durations).item())
+        std_traj_duration = float(np.std(traj_durations).item())
+
+        self._output_stats_histogram(traj_durations, dir_path=f"Outputs/Stats", filename="trajectory_durations_histogram.png",
+                                     title="Histogram of Trajectory Durations", xlabel="Trajectory Duration (s)", ylabel="Count")
+
+        masked_durations = np.sum(self._get_masked_mags(timestep_diffs, masks[:, 1:, :]), axis=1)
+        min_masked_duration = float(np.min(masked_durations).item())
+        max_masked_duration = float(np.max(masked_durations).item())
+        mean_masked_duration = float(np.mean(masked_durations).item())
+        std_masked_duration = float(np.std(masked_durations).item())
+
+        self._output_stats_histogram(masked_durations, dir_path=f"Outputs/Stats", filename="trajectory_masked_durations_histogram.png",
+                                     title="Histogram of Trajectory Masked Durations", xlabel="Trajectory Masked Duration", ylabel="Count")
+
+        return AISStats(
+            seq_len=seq_len,
+            num_trajs=num_trajs,
+            num_records=num_records,
+            num_masked_values=self._num_masked_values,
+
+            mean_abs_delta_n=mean_delta_n,
+            mean_abs_delta_e=mean_delta_e,
+            std_delta_n=std_delta_n,
+            std_delta_e=std_delta_e,
+
+            min_dist=min_dist,
+            max_dist=max_dist,
+            mean_dist=mean_dist,
+            std_dist=std_dist,
+
+            min_traj_len=min_traj_len,
+            max_traj_len=max_traj_len,
+            mean_traj_len=mean_traj_len,
+            std_traj_len=std_traj_len,
+
+            min_masked_len=min_masked_len,
+            max_masked_len=max_masked_len,
+            mean_masked_len=mean_masked_len,
+            std_masked_len=std_masked_len,
+
+            min_duration=min_duration,
+            max_duration=max_duration,
+            mean_duration=mean_duration,
+            std_duration=std_duration,
+
+            min_traj_duration=min_traj_duration,
+            max_traj_duration=max_traj_duration,
+            mean_traj_duration=mean_traj_duration,
+            std_traj_duration=std_traj_duration,
+
+            min_masked_duration=min_masked_duration,
+            max_masked_duration=max_masked_duration,
+            mean_masked_duration=mean_masked_duration,
+            std_masked_duration=std_masked_duration,
+        )
+
+    def _output_stats_histogram(self, data: np.ndarray, dir_path: str, filename: str, title: str, xlabel: str, ylabel: str):
+        os.makedirs(dir_path, exist_ok=True)
+        plt.hist(data, bins=50)
+        plt.title(title)
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.tight_layout()
+        plt.savefig(f"{dir_path}/{filename}", dpi=200)
+        plt.close()
+
+    def _get_masked_mags(self, mags: np.ndarray, masks: np.ndarray) -> np.ndarray:
+        distances = (mags[:, :-1] + mags[:, 1:]) / 2.0
+
+        return distances * (1 - masks[:, :-1, 0])
 
     def _get_processed_data(self, dates: list[dt.date]) -> AISDatasetProcessed:
         processed_data_file_paths = self._download_processed_data(dates)
@@ -204,25 +333,42 @@ class DataProcessor:
 
     def _get_trajectories_from_group(self, group: AISDatasetRaw, traj_len: int) -> list[np.ndarray]:
         data = np.delete(group.dataset, 1, axis=1)  # drop mmsi col
-        num_attributes = data.shape[1]
-        candidate_trajectories = []
 
-        cur_traj_len = 1
+        candidate_trajectories = []
+        curr_trajectory_idxes = [0]
+
+        last_lat = data[0, 1]
+        last_lon = data[0, 2]
+
         for i in range(1, data.shape[0]):
-            if self._is_trajectory_cut(data[i - 1], data[i]):
-                if cur_traj_len >= traj_len:
-                    candidate_trajectories.append(data[i - cur_traj_len:i])
-                cur_traj_len = 1
+            lat = data[i, 1]
+            lon = data[i, 2]
+
+            distance = GeoUtils.haversine_distance_km(last_lat, last_lon, lat, lon) * 1000.0
+
+            if distance < 0.5:
+                continue
+
+            if self._is_trajectory_cut(data[curr_trajectory_idxes[-1]], data[i]):
+                candidate_trajectories.append(curr_trajectory_idxes)
+                curr_trajectory_idxes = [i]
             else:
-                cur_traj_len += 1
+                curr_trajectory_idxes.append(i)
+
+            last_lat = lat
+            last_lon = lon
+
+        if curr_trajectory_idxes:
+            candidate_trajectories.append(curr_trajectory_idxes)
 
         same_length_trajectories = []
 
         for traj in candidate_trajectories:
-            num_full_trajs = traj.shape[0] // traj_len
+            num_full_trajs = len(traj) // traj_len
+            traj_data = data[traj, :]
             for n in range(num_full_trajs):
                 start_idx = n * traj_len
-                same_length_trajectories.append(traj[start_idx:start_idx + traj_len])
+                same_length_trajectories.append(traj_data[start_idx:start_idx + traj_len])
 
         valid_trajectories = [traj for traj in same_length_trajectories if self._is_valid_trajectory(traj)]
 
@@ -249,6 +395,24 @@ class DataProcessor:
         return False
 
     def _is_valid_trajectory(self, trajectory: np.ndarray) -> bool:
+        if trajectory.shape[0] < 2:
+            return False
+
+        total_distance_m = 0.0
+
+        for i in range(len(trajectory) - 1):
+            p1 = trajectory[i]
+            p2 = trajectory[i + 1]
+
+            lat1, lon1 = p1[1], p1[2]
+            lat2, lon2 = p2[1], p2[2]
+
+            segment_m = GeoUtils.haversine_distance_km(lat1, lon1, lat2, lon2) * 1000.0
+            total_distance_m += segment_m
+
+        if total_distance_m < 500 or total_distance_m > 10000:
+            return False
+
         return True
 
     def _filter_trajectories_forces(self, trajectories: list[np.ndarray], force_provider: IForceProvider) -> list[np.ndarray]:

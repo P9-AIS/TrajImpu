@@ -25,7 +25,7 @@
     "vscode": {
       "extensions": [
         "ms-vsliveshare.vsliveshare",
-        "phplasma.csv-to-table"
+        "ReprEng.csv"
       ]
     }
   },

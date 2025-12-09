@@ -72,7 +72,6 @@ class AisDataLoader:
                 dataset.data[idxs],
                 dataset.masks[idxs],
                 dataset.num_masked_values,
-                dataset.num_values_in_sequence,
                 dataset.stats,
             )
 

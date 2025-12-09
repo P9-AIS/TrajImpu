@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from ForceTypes.vessel_types import VesselType
 
 
 @dataclass
@@ -7,43 +6,100 @@ class AISStats:
     seq_len: int
     num_trajs: int
     num_records: int
-    mean_lat: float
-    mean_lon: float
-    std_lat: float
-    std_lon: float
+    num_masked_values: int
 
-    def combine(self, other: "AISStats") -> "AISStats":
-        combined_num_trajs = self.num_trajs + other.num_trajs
-        combined_num_records = self.num_records + other.num_records
+    mean_abs_delta_n: float
+    mean_abs_delta_e: float
+    std_delta_n: float
+    std_delta_e: float
 
-        combined_mean_lat = (
-            (self.mean_lat * self.num_records + other.mean_lat * other.num_records)
-            / combined_num_records
-        )
-        combined_mean_lon = (
-            (self.mean_lon * self.num_records + other.mean_lon * other.num_records)
-            / combined_num_records
-        )
+    min_dist: float
+    max_dist: float
+    mean_dist: float
+    std_dist: float
 
-        combined_var_lat = (
-            self.num_records * (self.std_lat**2 + (self.mean_lat - combined_mean_lat)**2)
-            + other.num_records * (other.std_lat**2 + (other.mean_lat - combined_mean_lat)**2)
-        ) / combined_num_records
+    min_traj_len: float
+    max_traj_len: float
+    mean_traj_len: float
+    std_traj_len: float
 
-        combined_var_lon = (
-            self.num_records * (self.std_lon**2 + (self.mean_lon - combined_mean_lon)**2)
-            + other.num_records * (other.std_lon**2 + (other.mean_lon - combined_mean_lon)**2)
-        ) / combined_num_records
+    min_masked_len: float
+    max_masked_len: float
+    mean_masked_len: float
+    std_masked_len: float
 
-        combined_std_lat = combined_var_lat**0.5
-        combined_std_lon = combined_var_lon**0.5
+    min_duration: float
+    max_duration: float
+    mean_duration: float
+    std_duration: float
 
-        return AISStats(
-            seq_len=self.seq_len,
-            num_trajs=combined_num_trajs,
-            num_records=combined_num_records,
-            mean_lat=combined_mean_lat,
-            mean_lon=combined_mean_lon,
-            std_lat=combined_std_lat,
-            std_lon=combined_std_lon,
-        )
+    min_traj_duration: float
+    max_traj_duration: float
+    mean_traj_duration: float
+    std_traj_duration: float
+
+    min_masked_duration: float
+    max_masked_duration: float
+    mean_masked_duration: float
+    std_masked_duration: float
+
+    def __str__(self) -> str:
+        lines = []
+        add = lines.append
+
+        add("=== AIS Statistics ===")
+        add(f"{'Seq length:':20} {self.seq_len}")
+        add(f"{'Num trajectories:':20} {self.num_trajs}")
+        add(f"{'Num records:':20} {self.num_records}")
+        add(f"{'Masked values:':20} {self.num_masked_values}")
+        add("")
+
+        add("— ΔN / ΔE —")
+        add(f"{'Mean abs ΔN:':20} {self.mean_abs_delta_n:.4f}")
+        add(f"{'Mean abs ΔE:':20} {self.mean_abs_delta_e:.4f}")
+        add(f"{'Std ΔN:':20} {self.std_delta_n:.4f}")
+        add(f"{'Std ΔE:':20} {self.std_delta_e:.4f}")
+        add("")
+
+        add("— Distances —")
+        add(f"{'Min dist:':20} {self.min_dist:.4f}")
+        add(f"{'Max dist:':20} {self.max_dist:.4f}")
+        add(f"{'Mean dist:':20} {self.mean_dist:.4f}")
+        add(f"{'Std dist:':20} {self.std_dist:.4f}")
+        add("")
+
+        add("— Trajectory lengths —")
+        add(f"{'Min traj len:':20} {self.min_traj_len:.2f}")
+        add(f"{'Max traj len:':20} {self.max_traj_len:.2f}")
+        add(f"{'Mean traj len:':20} {self.mean_traj_len:.2f}")
+        add(f"{'Std traj len:':20} {self.std_traj_len:.2f}")
+        add("")
+
+        add("— Masked segment lengths —")
+        add(f"{'Min masked len:':20} {self.min_masked_len:.2f}")
+        add(f"{'Max masked len:':20} {self.max_masked_len:.2f}")
+        add(f"{'Mean masked len:':20} {self.mean_masked_len:.2f}")
+        add(f"{'Std masked len:':20} {self.std_masked_len:.2f}")
+        add("")
+
+        add("— Durations —")
+        add(f"{'Min duration:':20} {self.min_duration:.2f}")
+        add(f"{'Max duration:':20} {self.max_duration:.2f}")
+        add(f"{'Mean duration:':20} {self.mean_duration:.2f}")
+        add(f"{'Std duration:':20} {self.std_duration:.2f}")
+        add("")
+
+        add("— Trajectory durations —")
+        add(f"{'Min traj duration:':20} {self.min_traj_duration:.2f}")
+        add(f"{'Max traj duration:':20} {self.max_traj_duration:.2f}")
+        add(f"{'Mean traj duration:':20} {self.mean_traj_duration:.2f}")
+        add(f"{'Std traj duration:':20} {self.std_traj_duration:.2f}")
+        add("")
+
+        add("— Masked segment durations —")
+        add(f"{'Min masked duration:':20} {self.min_masked_duration:.2f}")
+        add(f"{'Max masked duration:':20} {self.max_masked_duration:.2f}")
+        add(f"{'Mean masked duration:':20} {self.mean_masked_duration:.2f}")
+        add(f"{'Std masked duration:':20} {self.std_masked_duration:.2f}")
+
+        return "\n".join(lines)

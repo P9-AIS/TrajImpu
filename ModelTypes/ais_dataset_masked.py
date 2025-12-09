@@ -15,20 +15,18 @@ class AISBatch:
     observed_timestamps: torch.Tensor
     masks: torch.Tensor
     num_missing_values: int
-    num_values_in_sequence: int
     lats: torch.Tensor
     lons: torch.Tensor
 
 
 class AISDatasetMasked(Dataset[AISBatch]):
-    def __init__(self, timestamps: np.ndarray, lats: np.ndarray, lons: np.ndarray, data: np.ndarray, masks: np.ndarray, num_masked_values: int, num_values_in_sequence: int, stats: AISStats):
+    def __init__(self, timestamps: np.ndarray, lats: np.ndarray, lons: np.ndarray, data: np.ndarray, masks: np.ndarray, num_masked_values: int, stats: AISStats):
         self.timestamps = timestamps
         self.lats = lats
         self.lons = lons
         self.data = data
         self.masks = masks
         self.num_masked_values = num_masked_values
-        self.num_values_in_sequence = num_values_in_sequence
         self.stats = stats
 
     def __len__(self):
@@ -40,7 +38,6 @@ class AISDatasetMasked(Dataset[AISBatch]):
             observed_timestamps=torch.tensor(self.timestamps[idx], dtype=torch.int32, requires_grad=False),  # [maxlen]
             masks=torch.tensor(self.masks[idx], dtype=torch.int8, requires_grad=False),  # [maxlen, n]
             num_missing_values=self.num_masked_values,  # scalar
-            num_values_in_sequence=self.num_values_in_sequence,  # scalar
             lats=torch.tensor(self.lats[idx], dtype=torch.float32, requires_grad=False),
             lons=torch.tensor(self.lons[idx], dtype=torch.float32, requires_grad=False),
         )
@@ -52,32 +49,22 @@ class AISDatasetMasked(Dataset[AISBatch]):
             observed_timestamps=torch.stack([b.observed_timestamps for b in batch]),
             masks=torch.stack([b.masks for b in batch]),
             num_missing_values=max(b.num_missing_values for b in batch),  # or keep as list
-            num_values_in_sequence=max(b.num_values_in_sequence for b in batch),  # or list
             lats=torch.stack([b.lats for b in batch]),
             lons=torch.stack([b.lons for b in batch]),
         )
 
     @staticmethod
-    def from_ais_dataset_processed(processed_dataset: AISDatasetProcessed, masks: np.ndarray, num_missing_values: int, num_values_in_sequence: int) -> "AISDatasetMasked":
+    def from_ais_dataset_processed(processed_dataset: AISDatasetProcessed, masks: np.ndarray, stats: AISStats) -> "AISDatasetMasked":
         instance = AISDatasetMasked(
             timestamps=processed_dataset.timestamps,
             data=processed_dataset.data,
             masks=masks,
-            num_masked_values=num_missing_values,
-            num_values_in_sequence=num_values_in_sequence,
-            stats=processed_dataset.stats,
+            num_masked_values=stats.num_masked_values,
+            stats=stats,
             lats=processed_dataset.lats,
             lons=processed_dataset.lons,
         )
         return instance
-
-    def combine(self, other: "AISDatasetMasked"):
-        self.timestamps = np.vstack((self.timestamps, other.timestamps))
-        self.data = np.vstack((self.data, other.data))
-        self.masks = np.vstack((self.masks, other.masks))
-        self.stats = self.stats.combine(other.stats)
-        self.lats = np.vstack((self.lats, other.lats))
-        self.lons = np.vstack((self.lons, other.lons))
 
     def save(self, path: str):
         os.makedirs(os.path.dirname(path), exist_ok=True)
