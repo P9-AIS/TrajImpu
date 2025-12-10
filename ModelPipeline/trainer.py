@@ -56,6 +56,8 @@ class Trainer:
         best_average_validation_loss = float('inf')
         epochs_since_improvement = 0
 
+        self._upload_handler.reset_predictions()
+
         for epoch in range(self._cfg.num_epochs):
             print(f"Epoch {epoch + 1}/{self._cfg.num_epochs}")
             average_train_loss = self._run_training_batches(epoch)
@@ -84,8 +86,6 @@ class Trainer:
         total_loss = 0.0
         average_loss = 0.0
         self._model.train()
-
-        self._upload_handler.reset_predictions()
 
         with torch.enable_grad():
             for batch_no, batch in enumerate(it, start=1):

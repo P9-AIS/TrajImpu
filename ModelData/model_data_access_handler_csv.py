@@ -239,6 +239,9 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
         print("Dropping rows with NaN values...")
         df = df.dropna()
 
+        print("Filtering cargos and tankers...")
+        df = df[(df["Ship type"] == VesselType.CARGO.value) | (df["Ship type"] == VesselType.TANKER.value)]
+
         print("Filtering out-of-bounds latitude and longitude...")
         df = df[((df['Latitude'] >= -90) & (df['Latitude'] <= 90)) &
                 ((df['Longitude'] >= -180) & (df['Longitude'] <= 180))]

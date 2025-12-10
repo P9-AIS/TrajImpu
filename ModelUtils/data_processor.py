@@ -246,7 +246,8 @@ class DataProcessor:
             if group_trajectories:
                 initial_trajectories.extend(group_trajectories)
 
-        filtered_trajectories = self._filter_trajectories_forces(initial_trajectories, self._depth_force_provider)
+        # filtered_trajectories = self._filter_trajectories_forces(initial_trajectories, self._depth_force_provider)
+        filtered_trajectories = self._filter_trajectories_smooth(initial_trajectories)
 
         trajectories = np.array(filtered_trajectories, dtype=np.float64)
 
@@ -438,6 +439,58 @@ class DataProcessor:
         filtered_pairs = traj_and_impacts[start_index:end_index]
 
         return [pair[0] for pair in filtered_pairs]
+
+    def _filter_trajectories_smooth(self, trajectories: list[np.ndarray]) -> list[np.ndarray]:
+        """
+        Filters trajectories to keep non-trivial, smooth curves (like gentle S patterns).
+        min_total_angle: minimum sum of angles between segments to exclude straight lines
+        max_total_angle: maximum sum of angles to exclude jagged trajectories
+        """
+        def trajectory_smoothness_coarse(traj: np.ndarray, step: int = 10) -> float:
+            """
+            Compute smoothness using coarse-grained segments.
+            - traj: np.ndarray of shape (T, D), where [:,1:3] are N/E coordinates
+            - step: number of points per coarse segment (default=10)
+            """
+
+            # Get N/E deltas
+            deltas = np.diff(traj[:, 1:3], axis=0)
+
+            # Chunk deltas into coarse segments
+            coarse_segments = []
+            for i in range(0, len(deltas), step):
+                seg = np.sum(deltas[i:i+step], axis=0)
+                if np.linalg.norm(seg) > 0:
+                    coarse_segments.append(seg)
+
+            coarse_segments = np.array(coarse_segments)
+            if len(coarse_segments) < 2:
+                return 0.0
+
+            # Compute angles between coarse segments
+            angles = []
+            for i in range(len(coarse_segments) - 1):
+                v1 = coarse_segments[i]
+                v2 = coarse_segments[i + 1]
+
+                n1 = np.linalg.norm(v1)
+                n2 = np.linalg.norm(v2)
+                if n1 == 0 or n2 == 0:
+                    continue
+
+                cos_theta = np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0)
+                angle = np.arccos(cos_theta) * 180.0 / np.pi
+                angles.append(angle)
+
+            return float(np.sum(angles))
+
+        filtered = []
+        for traj in trajectories:
+            score = trajectory_smoothness_coarse(traj)
+            if 45 <= score <= 360:
+                filtered.append(traj)
+
+        return filtered
 
     def _filter_trajectories_curvature(self, trajectories: list[np.ndarray]) -> list[np.ndarray]:
         filtered = []
