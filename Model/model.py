@@ -79,11 +79,13 @@ class Model(nn.Module):
             fine_mask_force
         ], dim=-1).detach()
 
-        all_decoded = []
-        all_truth = []
+        all_deltas_pred = []
+        all_deltas_true = []
+        all_pos_pred = []
+        all_pos_true = []
 
         encoded = self.ais_encoder(observed)
-        forces, true_forces = self.force_encoder(lats, lons)
+        forces, forces_true = self.force_encoder(lats, lons)
         features = torch.cat((encoded, forces), dim=-1)  # shape [b, s, e * 3]
 
         b, s, f = features.size()
@@ -152,13 +154,23 @@ class Model(nn.Module):
                                 last_mask_idx, direction="backward")
 
             # get updated lat lons
-            first_lat = lats[batch_idx, first_mask_idx]
-            first_lon = lons[batch_idx, first_mask_idx]
-            last_lat = lats[batch_idx, last_mask_idx]
-            last_lon = lons[batch_idx, last_mask_idx]
+            first_lat_pred = lats[batch_idx, first_mask_idx]
+            first_lon_pred = lons[batch_idx, first_mask_idx]
+            last_lat_pred = lats[batch_idx, last_mask_idx]
+            last_lon_pred = lons[batch_idx, last_mask_idx]
 
-            first_forces, _ = self.force_encoder(first_lat.unsqueeze(1), first_lon.unsqueeze(1))
-            last_forces, _ = self.force_encoder(last_lat.unsqueeze(1), last_lon.unsqueeze(1))
+            first_lat_truth = true_lats[batch_idx, first_mask_idx]
+            first_lon_truth = true_lons[batch_idx, first_mask_idx]
+            last_lat_truth = true_lats[batch_idx, last_mask_idx]
+            last_lon_truth = true_lons[batch_idx, last_mask_idx]
+
+            first_pos_pred = torch.stack([first_lat_pred, first_lon_pred], dim=-1).unsqueeze(1)
+            last_pos_pred = torch.stack([last_lat_pred, last_lon_pred], dim=-1).unsqueeze(1)
+            first_pos_true = torch.stack([first_lat_truth, first_lon_truth], dim=-1).unsqueeze(1)
+            last_pos_true = torch.stack([last_lat_truth, last_lon_truth], dim=-1).unsqueeze(1)
+
+            first_forces, _ = self.force_encoder(first_lat_pred.unsqueeze(1), first_lon_pred.unsqueeze(1))
+            last_forces, _ = self.force_encoder(last_lat_pred.unsqueeze(1), last_lon_pred.unsqueeze(1))
 
             first_features = torch.cat((first_encoded, first_forces), dim=-1)
             last_features = torch.cat((last_encoded, last_forces), dim=-1)
@@ -173,20 +185,33 @@ class Model(nn.Module):
             fine_masks = fine_masks.scatter(1, first_scatter_index, 1)
             fine_masks = fine_masks.scatter(1, last_scatter_index, 1)
 
-            all_decoded.insert(i, first_decoded)
-            all_truth.insert(i, first_truth)
+            all_pos_pred.insert(i, first_pos_pred)
+            all_pos_true.insert(i, first_pos_true)
+            all_deltas_pred.insert(i, first_decoded)
+            all_deltas_true.insert(i, first_truth)
 
-            all_decoded.insert(i + 1, last_decoded)
-            all_truth.insert(i + 1, last_truth)
+            all_pos_pred.insert(i + 1, last_pos_pred)
+            all_pos_true.insert(i + 1, last_pos_true)
+            all_deltas_pred.insert(i + 1, last_decoded)
+            all_deltas_true.insert(i + 1, last_truth)
 
         # concatenate all decoded steps
-        all_decoded_tensor = torch.cat(all_decoded, dim=1)
-        all_truth_tensor = torch.cat(all_truth, dim=1)
+        all_deltas_pred = torch.cat(all_deltas_pred, dim=1)
+        all_deltas_true = torch.cat(all_deltas_true, dim=1)
+        all_pos_pred = torch.cat(all_pos_pred, dim=1)
+        all_pos_true = torch.cat(all_pos_true, dim=1)
 
-        decoded_forces = self.force_decoder(forces)
+        forces_pred = self.force_decoder(forces)
+
+        full_traj_pred = torch.stack([lats, lons], dim=-1)
+        full_traj_true = torch.stack([true_lats, true_lons], dim=-1)
 
         loss = self.loss_calculator.calculate_loss(
-            all_decoded_tensor, all_truth_tensor, total_consistency_loss, decoded_forces, true_forces)
+            full_traj_pred, full_traj_true,
+            all_pos_pred, all_pos_true,
+            all_deltas_pred, all_deltas_true,
+            total_consistency_loss,
+            forces_pred, forces_true)
 
         return loss, (lats, lons, true_lats, true_lons)
 

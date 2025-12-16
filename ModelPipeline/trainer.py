@@ -96,10 +96,8 @@ class Trainer:
                 self._optimizer.step()
                 self._global_training_step += 1
                 self._writer.add_scalar("train/total", loss.mae.total_loss.item(), self._global_training_step)
-                self._writer.add_scalar("train/avg_mse", average_loss, epoch_no)
-                self._writer.add_scalar("train/lat", loss.mae.lat_loss.item(), self._global_training_step)
-                self._writer.add_scalar("train/lon", loss.mae.lon_loss.item(), self._global_training_step)
-                self._writer.add_scalar("train/haversine", loss.mae.haversine_loss.item(),
+                self._writer.add_scalar("train/delta_hyp", loss.mae.delta_hyp_loss.item(), self._global_training_step)
+                self._writer.add_scalar("train/pos_distance", loss.mae.pos_distance_loss.item(),
                                         self._global_training_step)
                 self._writer.add_scalar("train/consistency", loss.mae.consistency_loss.item(),
                                         self._global_training_step)
@@ -164,9 +162,9 @@ class Trainer:
     def _run_test_batches(self, epoch_no: int):
         self._model.eval()
 
-        total_losses_mae = {"lat_mae": 0.0, "lon_mae": 0.0, "haversine_mae": 0.0}
+        total_losses_mae = {"pos_dist": 0.0, "delta_hyp": 0.0, "frechet": 0.0}
 
-        total_losses_smape = {"lat_smape": 0.0, "lon_smape": 0.0, "haversine_smape": 0.0}
+        total_losses_smape = {"pos_dist": 0.0, "delta_hyp": 0.0, "frechet": 0.0}
 
         count = 0
 
@@ -178,13 +176,13 @@ class Trainer:
                 # Ensure batch[0] exists and has a size attribute
                 batch_size = batch.observed_data.size(0)
 
-                total_losses_mae["lat_mae"] += loss.mae.lat_loss.item() * batch_size
-                total_losses_mae["lon_mae"] += loss.mae.lon_loss.item() * batch_size
-                total_losses_mae["haversine_mae"] += loss.mae.haversine_loss.item() * batch_size
+                total_losses_mae["pos_dist"] += loss.mae.pos_distance_loss.item() * batch_size
+                total_losses_mae["delta_hyp"] += loss.mae.delta_hyp_loss.item() * batch_size
+                total_losses_mae["frechet"] += loss.mae.frechet_distance_loss * batch_size
 
-                total_losses_smape["lat_smape"] += loss.smape.lat_loss.item() * batch_size
-                total_losses_smape["lon_smape"] += loss.smape.lon_loss.item() * batch_size
-                total_losses_smape["haversine_smape"] += loss.smape.haversine_loss.item() * batch_size
+                total_losses_smape["pos_dist"] += loss.smape.pos_distance_loss.item() * batch_size
+                total_losses_smape["delta_hyp"] += loss.smape.delta_hyp_loss.item() * batch_size
+                total_losses_smape["frechet"] += loss.smape.frechet_distance_loss * batch_size
                 count += batch_size
 
                 it.set_postfix({"epoch": epoch_no}, refresh=False)
@@ -201,7 +199,7 @@ class Trainer:
                 self._writer.add_scalar(f"test/{name}", avg_loss, epoch_no)
 
             # 3. Print to Console
-            print(f"Test Epoch {epoch_no} Complete. Avg Haversine Loss: {avg_losses_mae['haversine_mae']:.4f}")
+            print(f"Test Epoch {epoch_no} Complete. Avg dist Loss: {avg_losses_mae['pos_dist']:.4f}")
 
             # 4. Write to File (CSV format is best for analysis later)
             dirpath = f"{self._cfg.output_dir}/test_logs"

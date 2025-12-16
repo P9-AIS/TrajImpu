@@ -57,8 +57,10 @@ class Model(nn.Module):
         masks = ais_batch.masks.to(self._cfg.device)
         fine_masks = torch.repeat_interleave(masks, self._cfg.dim_ais_attr_encoding, dim=2).detach()
 
-        all_decoded = []
-        all_truth = []
+        all_deltas_pred = []
+        all_deltas_true = []
+        all_pos_pred = []
+        all_pos_true = []
 
         encoded = self.ais_encoder(observed)
         b, s, f = encoded.size()
@@ -127,6 +129,21 @@ class Model(nn.Module):
             self.update_lat_lon(lats, lons, eastern_deltas_last, northern_deltas_last,
                                 last_mask_idx, direction="backward")
 
+            first_lat_pred = lats[batch_idx, first_mask_idx]
+            first_lon_pred = lons[batch_idx, first_mask_idx]
+            last_lat_pred = lats[batch_idx, last_mask_idx]
+            last_lon_pred = lons[batch_idx, last_mask_idx]
+
+            first_lat_truth = true_lats[batch_idx, first_mask_idx]
+            first_lon_truth = true_lons[batch_idx, first_mask_idx]
+            last_lat_truth = true_lats[batch_idx, last_mask_idx]
+            last_lon_truth = true_lons[batch_idx, last_mask_idx]
+
+            first_pos_pred = torch.stack([first_lat_pred, first_lon_pred], dim=-1).unsqueeze(1)
+            last_pos_pred = torch.stack([last_lat_pred, last_lon_pred], dim=-1).unsqueeze(1)
+            first_pos_true = torch.stack([first_lat_truth, first_lon_truth], dim=-1).unsqueeze(1)
+            last_pos_true = torch.stack([last_lat_truth, last_lon_truth], dim=-1).unsqueeze(1)
+
             # update encoded sequence with NEW ground truth / imputed value
             first_scatter_index = first_mask_idx.view(-1, 1, 1).expand(-1, 1, f)
             last_scatter_index = last_mask_idx.view(-1, 1, 1).expand(-1, 1, f)
@@ -137,21 +154,34 @@ class Model(nn.Module):
             fine_masks = fine_masks.scatter(1, first_scatter_index, 1)
             fine_masks = fine_masks.scatter(1, last_scatter_index, 1)
 
-            all_decoded.insert(i, first_decoded)
-            all_truth.insert(i, first_truth)
+            all_pos_pred.insert(i, first_pos_pred)
+            all_pos_true.insert(i, first_pos_true)
+            all_deltas_pred.insert(i, first_decoded)
+            all_deltas_true.insert(i, first_truth)
 
-            all_decoded.insert(i + 1, last_decoded)
-            all_truth.insert(i + 1, last_truth)
+            all_pos_pred.insert(i + 1, last_pos_pred)
+            all_pos_true.insert(i + 1, last_pos_true)
+            all_deltas_pred.insert(i + 1, last_decoded)
+            all_deltas_true.insert(i + 1, last_truth)
 
         # concatenate all decoded steps
-        all_decoded_tensor = torch.cat(all_decoded, dim=1)
-        all_truth_tensor = torch.cat(all_truth, dim=1)
+        all_deltas_pred = torch.cat(all_deltas_pred, dim=1)
+        all_deltas_true = torch.cat(all_deltas_true, dim=1)
+        all_pos_pred = torch.cat(all_pos_pred, dim=1)
+        all_pos_true = torch.cat(all_pos_true, dim=1)
 
-        force_pred = torch.zeros(1, device=all_decoded_tensor.device)
-        force_true = torch.zeros(1, device=all_truth_tensor.device)
+        forces_pred = torch.zeros(1, device=all_pos_pred.device)
+        forces_true = torch.zeros(1, device=all_pos_true.device)
+
+        full_traj_pred = torch.stack([lats, lons], dim=-1)
+        full_traj_true = torch.stack([true_lats, true_lons], dim=-1)
 
         loss = self.loss_calculator.calculate_loss(
-            all_decoded_tensor, all_truth_tensor, total_consistency_loss, force_pred, force_true)
+            full_traj_pred, full_traj_true,
+            all_pos_pred, all_pos_true,
+            all_deltas_pred, all_deltas_true,
+            total_consistency_loss,
+            forces_pred, forces_true)
 
         return loss, (lats, lons, true_lats, true_lons)
 
