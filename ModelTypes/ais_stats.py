@@ -102,4 +102,4 @@ class AISStats:
         add(f"{'Mean masked duration:':20} {self.mean_masked_duration:.2f}")
         add(f"{'Std masked duration:':20} {self.std_masked_duration:.2f}")
 
-        return "\n".join(lines)
+        return "\n".join(lines) + "\n"

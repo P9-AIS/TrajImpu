@@ -1,5 +1,7 @@
+import csv
+import os
 import torch
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from ModelTypes.ais_col_dict import AISColDict
 
 
@@ -160,3 +162,95 @@ class LossCalculator:
             return ca[i, j]
 
         return recurse(T - 1, T - 1).item()
+
+
+@dataclass
+class LossTotals:
+    pos_dist: float = 0.0
+    delta_hyp: float = 0.0
+    frechet: float = 0.0
+
+    def add(self, loss, batch_size: int):
+        self.pos_dist += loss.pos_distance_loss.item() * batch_size
+        self.delta_hyp += loss.delta_hyp_loss.item() * batch_size
+        self.frechet += loss.frechet_distance_loss * batch_size
+
+    def average(self, count: int) -> "LossTotals":
+        if count == 0:
+            return self
+        return LossTotals(
+            pos_dist=self.pos_dist / count,
+            delta_hyp=self.delta_hyp / count,
+            frechet=self.frechet / count,
+        )
+
+    def as_dict(self):
+        return {
+            "pos_dist": self.pos_dist,
+            "delta_hyp": self.delta_hyp,
+            "frechet": self.frechet,
+        }
+
+    def as_list(self):
+        return [self.pos_dist, self.delta_hyp, self.frechet]
+
+    @staticmethod
+    def headers(prefix: str):
+        return [
+            f"{prefix}_pos_dist",
+            f"{prefix}_delta_hyp",
+            f"{prefix}_frechet",
+        ]
+
+
+@dataclass
+class LossAccumulator:
+    mae: LossTotals = field(default_factory=LossTotals)
+    smape: LossTotals = field(default_factory=LossTotals)
+    count: int = 0
+
+    def add_batch(self, loss, batch_size: int):
+        self.mae.add(loss.mae, batch_size)
+        self.smape.add(loss.smape, batch_size)
+        self.count += batch_size
+
+    def average(self) -> "LossAccumulator":
+        return LossAccumulator(
+            mae=self.mae.average(self.count),
+            smape=self.smape.average(self.count),
+            count=self.count,
+        )
+
+    @staticmethod
+    def csv_headers(include_epoch: bool = False):
+        headers = []
+        if include_epoch:
+            headers.append("epoch")
+        headers += LossTotals.headers("mae")
+        headers += LossTotals.headers("smape")
+        return headers
+
+    def csv_row(self, epoch: int | None = None):
+        row = []
+        if epoch is not None:
+            row.append(epoch)
+
+        row += self.mae.as_list()
+        row += self.smape.as_list()
+        return [f"{v:.6f}" if isinstance(v, float) else v for v in row]
+
+    def write_csv(
+        self,
+        path: str,
+        epoch: int | None = None,
+    ):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        file_exists = os.path.isfile(path)
+
+        with open(path, mode="a", newline="") as f:
+            writer = csv.writer(f)
+
+            if not file_exists:
+                writer.writerow(self.csv_headers(include_epoch=epoch is not None))
+
+            writer.writerow(self.csv_row(epoch))

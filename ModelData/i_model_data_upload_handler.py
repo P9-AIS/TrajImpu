@@ -9,10 +9,10 @@ class IModelDataUploadHandler(ABC):
         pass
 
     @abstractmethod
-    def upload_predictions(self, step: int, predicted_lats: torch.Tensor, predicted_lons: torch.Tensor,
+    def upload_predictions(self, model_name, masks, predicted_lats: torch.Tensor, predicted_lons: torch.Tensor,
                            true_lats: torch.Tensor, true_lons: torch.Tensor) -> None:
         pass
 
     @abstractmethod
-    def reset_predictions(self) -> None:
+    def reset_predictions(self, model_name) -> None:
         pass

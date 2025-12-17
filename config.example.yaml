@@ -58,10 +58,6 @@ modelCfg:
     # encoder
     dim_ais_attr_encoding: 32
 
-    # afa module
-    num_layers: 2
-    num_head: 4
-
     # brits
     dim_rnn_hidden: 128
     MIT: true
@@ -75,10 +71,9 @@ simpleCfg:
     # brits
     dim_rnn_hidden: 128
     MIT: true
-
-encdecCfg:
+  
+lerpCfg:
     device: "cuda:0"
-    dim_ais_attr_encoding: 32
 
 modelDataCfg:
   area: "string"
@@ -114,6 +109,9 @@ modelTrainerCfg:
   validation_patience: 3
   validation_every_n_epochs: 5
   upload_every_n_steps: 5
+
+modelPredicterCfg:
+  output_dir: "Outputs"
 
 modelDataUploadHandlerCfg:
   server_address: "http://trajviz_devcontainer-devcontainer-1:4000"

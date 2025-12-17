@@ -9,11 +9,12 @@ from ForceUtils.heatmap_generator import Config as HeatmapGeneratorConfig
 from ForceData.force_data_upload_handler_http import Config as ForceDataUploadHandlerConfig
 from Model.model import Config as ModelConfig
 from Model.simple import Config as SimpleCfg
-from Model.encdec import Config as EncdecCfg
+from Model.lerp import Config as LerpConfig
 from ModelUtils.data_loader import Config as ModelDataLoaderConfig
 from ModelData.model_data_access_handler_csv import Config as ModelDataConfig
 from ModelUtils.data_processor import MaskingStrategy, Config as ModelProcessorConfig
 from ModelPipeline.trainer import Config as ModelTrainerConfig
+from ModelPipeline.predicter import Config as ModelPredicterConfig
 from ModelData.model_data_upload_handler_http import Config as ModelDataUploadHandlerConfig
 from dataclasses import dataclass
 
@@ -27,11 +28,12 @@ class Config:
     forceDataUploadHandlerCfg: ForceDataUploadHandlerConfig
     modelCfg: ModelConfig
     simpleCfg: SimpleCfg
-    encdecCfg: EncdecCfg
+    lerpCfg: LerpConfig
     modelDataLoaderCfg: ModelDataLoaderConfig
     modelDataCfg: ModelDataConfig
     modelDataProcessorCfg: ModelProcessorConfig
     modelTrainerCfg: ModelTrainerConfig
+    modelPredicterCfg: ModelPredicterConfig
     modelDataUploadHandlerCfg: ModelDataUploadHandlerConfig
 
 
@@ -50,11 +52,12 @@ def parse_config(path: str) -> Config:
             ForceDataUploadHandlerConfig, cfg_dict["forceDataUploadHandlerCfg"]),
         modelCfg=ConfigVisitorRegistry.visit(ModelConfig, cfg_dict["modelCfg"]),
         simpleCfg=ConfigVisitorRegistry.visit(SimpleCfg, cfg_dict["simpleCfg"]),
-        encdecCfg=ConfigVisitorRegistry.visit(EncdecCfg, cfg_dict["encdecCfg"]),
+        lerpCfg=ConfigVisitorRegistry.visit(LerpConfig, cfg_dict["lerpCfg"]),
         modelDataLoaderCfg=ConfigVisitorRegistry.visit(ModelDataLoaderConfig, cfg_dict["modelDataLoaderCfg"]),
         modelDataCfg=ConfigVisitorRegistry.visit(ModelDataConfig, cfg_dict["modelDataCfg"]),
         modelDataProcessorCfg=ConfigVisitorRegistry.visit(ModelProcessorConfig, cfg_dict["modelDataProcessorCfg"]),
         modelTrainerCfg=ConfigVisitorRegistry.visit(ModelTrainerConfig, cfg_dict["modelTrainerCfg"]),
+        modelPredicterCfg=ConfigVisitorRegistry.visit(ModelPredicterConfig, cfg_dict["modelPredicterCfg"]),
         modelDataUploadHandlerCfg=ConfigVisitorRegistry.visit(
             ModelDataUploadHandlerConfig, cfg_dict["modelDataUploadHandlerCfg"])
     )
@@ -135,7 +138,8 @@ ConfigVisitorRegistry.register(
     lambda data: ModelProcessorConfig(
         traj_len=data["traj_len"],
         lead_len=data["lead_len"],
-        output_dir=data["output_dir"],
+        output_dir_data=data["output_dir_data"],
+        output_dir_stats=data["output_dir_stats"],
         masking_strategy=MaskingStrategy[data["masking_strategy"]],
         masking_percentage=data["masking_percentage"],
         min_sog=data["min_sog"],
@@ -150,6 +154,11 @@ ConfigVisitorRegistry.register(
 )
 
 ConfigVisitorRegistry.register(
+    ModelPredicterConfig,
+    lambda data: ModelPredicterConfig(**data)
+)
+
+ConfigVisitorRegistry.register(
     ModelConfig,
     lambda data: ModelConfig(**data)
 )
@@ -160,8 +169,8 @@ ConfigVisitorRegistry.register(
 )
 
 ConfigVisitorRegistry.register(
-    EncdecCfg,
-    lambda data: EncdecCfg(**data)
+    LerpConfig,
+    lambda data: LerpConfig(**data)
 )
 
 ConfigVisitorRegistry.register(

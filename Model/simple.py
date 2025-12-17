@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from dataclasses import dataclass
 from Model.ais_encoder import HeterogeneousAttributeEncoder
-from Model.afa_module import AFAModule
 from Model.brits import BRITS
 from Model.ais_decoder import HeterogeneousAttributeDecoder
 from ModelTypes.ais_col_dict import AISColDict

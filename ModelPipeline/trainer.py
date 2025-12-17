@@ -6,9 +6,11 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from ModelData.i_model_data_upload_handler import IModelDataUploadHandler
+from ModelUtils.data_processor import Config as DataProcessorConfig
 import os
-import csv
 import datetime as dt
+
+from ModelUtils.loss_calculator import LossAccumulator
 
 
 @dataclass
@@ -29,11 +31,12 @@ class Trainer:
     _optimizer: torch.optim.Optimizer
     _upload_handler: IModelDataUploadHandler
 
-    def __init__(self, model: nn.Module, train_data_loader: DataLoader, validation_data_loader: DataLoader, test_data_loader: DataLoader, upload_handler: IModelDataUploadHandler, config: Config):
+    def __init__(self, model: nn.Module, train_data_loader: DataLoader, validation_data_loader: DataLoader, test_data_loader: DataLoader, upload_handler: IModelDataUploadHandler, data_processor_cfg: DataProcessorConfig, config: Config):
         self._cfg = config
+        self._data_description = f"{data_processor_cfg.masking_strategy}_{data_processor_cfg.masking_percentage}"
 
-        self._run_name = f"run_{model}_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        log_dir = os.path.join(self._cfg.output_dir, "tensorboard_logs", self._run_name)
+        self._run_name = f"run_{model}_{self._data_description}_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        log_dir = os.path.join(self._cfg.output_dir, "Tensorboard", self._run_name)
         self._writer = SummaryWriter(log_dir=log_dir, flush_secs=1)
 
         self._train_data_loader = train_data_loader
@@ -55,8 +58,6 @@ class Trainer:
         best_train_loss = float('inf')
         best_average_validation_loss = float('inf')
         epochs_since_improvement = 0
-
-        self._upload_handler.reset_predictions()
 
         for epoch in range(self._cfg.num_epochs):
             print(f"Epoch {epoch + 1}/{self._cfg.num_epochs}")
@@ -91,7 +92,7 @@ class Trainer:
             for batch_no, batch in enumerate(it, start=1):
                 self._optimizer.zero_grad()
 
-                loss, (pred_lats, pred_lons, true_lats, true_lons) = self._model.forward(batch)
+                loss, _ = self._model.forward(batch)
                 loss.mse.total_loss.backward()
                 self._optimizer.step()
                 self._global_training_step += 1
@@ -106,16 +107,6 @@ class Trainer:
 
                 total_loss += loss.mse.total_loss.item()
                 average_loss = total_loss / batch_no
-
-                if self._global_training_step % self._cfg.upload_every_n_steps == 0:
-                    self._global_upload_step += 1
-                    self._upload_handler.upload_predictions(
-                        step=self._global_upload_step,
-                        predicted_lats=pred_lats,
-                        predicted_lons=pred_lons,
-                        true_lats=true_lats,
-                        true_lons=true_lons,
-                    )
 
                 it.set_postfix(
                     ordered_dict={
@@ -161,61 +152,28 @@ class Trainer:
 
     def _run_test_batches(self, epoch_no: int):
         self._model.eval()
-
-        total_losses_mae = {"pos_dist": 0.0, "delta_hyp": 0.0, "frechet": 0.0}
-
-        total_losses_smape = {"pos_dist": 0.0, "delta_hyp": 0.0, "frechet": 0.0}
-
-        count = 0
+        acc = LossAccumulator()
 
         it = tqdm(self._test_data_loader, mininterval=5.0, maxinterval=50.0)
 
         with torch.no_grad():
             for batch in it:
                 loss, _ = self._model.forward(batch)
-                # Ensure batch[0] exists and has a size attribute
                 batch_size = batch.observed_data.size(0)
 
-                total_losses_mae["pos_dist"] += loss.mae.pos_distance_loss.item() * batch_size
-                total_losses_mae["delta_hyp"] += loss.mae.delta_hyp_loss.item() * batch_size
-                total_losses_mae["frechet"] += loss.mae.frechet_distance_loss * batch_size
-
-                total_losses_smape["pos_dist"] += loss.smape.pos_distance_loss.item() * batch_size
-                total_losses_smape["delta_hyp"] += loss.smape.delta_hyp_loss.item() * batch_size
-                total_losses_smape["frechet"] += loss.smape.frechet_distance_loss * batch_size
-                count += batch_size
-
+                acc.add_batch(loss, batch_size)
                 it.set_postfix({"epoch": epoch_no}, refresh=False)
 
         it.close()
+        avg = acc.average()
 
-        if count > 0:
-            # 1. Calculate averages into a neat dictionary
-            avg_losses_mae = {name: val / count for name, val in total_losses_mae.items()}
-            avg_losses_smape = {name: val / count for name, val in total_losses_smape.items()}
+        for name, val in avg.mae.as_dict().items():
+            self._writer.add_scalar(f"test/{name}", val, epoch_no)
 
-            # 2. Log to TensorBoard
-            for name, avg_loss in avg_losses_mae.items():
-                self._writer.add_scalar(f"test/{name}", avg_loss, epoch_no)
+        print(
+            f"Test Epoch {epoch_no} Complete. "
+            f"Avg dist Loss: {avg.mae.pos_dist:.4f}"
+        )
 
-            # 3. Print to Console
-            print(f"Test Epoch {epoch_no} Complete. Avg dist Loss: {avg_losses_mae['pos_dist']:.4f}")
-
-            # 4. Write to File (CSV format is best for analysis later)
-            dirpath = f"{self._cfg.output_dir}/test_logs"
-            os.makedirs(dirpath, exist_ok=True)
-            log_path = f"{dirpath}/{self._run_name}.csv"
-            file_exists = os.path.isfile(log_path)
-
-            with open(log_path, mode='a', newline='') as f:
-                writer = csv.writer(f)
-
-                # If file is new, write the header row first
-                if not file_exists:
-                    headers = ["epoch"] + list(avg_losses_mae.keys()) + list(avg_losses_smape.keys())
-                    writer.writerow(headers)
-
-                # Write the data row
-                row_data = [epoch_no] + [f"{val:.6f}" for val in avg_losses_mae.values()] + \
-                    [f"{val:.6f}" for val in avg_losses_smape.values()]
-                writer.writerow(row_data)
+        path = f"{self._cfg.output_dir}/Training/{self._run_name}.csv"
+        avg.write_csv(path, epoch=epoch_no)

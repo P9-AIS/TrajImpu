@@ -44,10 +44,13 @@ class ModelDataUploadHandlerHTTP(IModelDataUploadHandler):
 
         print(response.status_code, response.json())
 
-    def upload_predictions(self, step: int, predicted_lats: torch.Tensor, predicted_lons: torch.Tensor,
+    def upload_predictions(self, model_name, masks, predicted_lats: torch.Tensor, predicted_lons: torch.Tensor,
                            true_lats: torch.Tensor, true_lons: torch.Tensor) -> None:
 
+        masks_new = masks[..., 0]
+
         concat = torch.stack([
+            masks_new,
             predicted_lats,
             predicted_lons,
             true_lats,
@@ -56,25 +59,22 @@ class ModelDataUploadHandlerHTTP(IModelDataUploadHandler):
 
         concat = concat.cpu().numpy()
 
-        data = {
-            "step": step,
-            "predictions": concat.tolist()
-        }
+        data = {"predictions": concat.tolist()}
 
         json_bytes = json.dumps(data).encode("utf-8")
         compressed = gzip.compress(json_bytes)
 
-        print(f"Uploading predictions for step {step} to {self._cfg.server_address}...")
+        print(f"Uploading predictions to {self._cfg.server_address}...")
         response = requests.post(
-            f"{self._cfg.server_address}/predictions",
+            f"{self._cfg.server_address}/predictions/{model_name}",
             data=compressed,
             headers={"Content-Type": "application/octet-stream"}  # just raw bytes
         )
 
         print(response.status_code, response.json())
 
-    def reset_predictions(self) -> None:
-        print(f"Resetting predictions on server at {self._cfg.server_address}...")
-        response = requests.post(f"{self._cfg.server_address}/predictions/reset")
+    def reset_predictions(self, model_name) -> None:
+        print(f"Resetting predictions for model {model_name} on server at {self._cfg.server_address}...")
+        response = requests.post(f"{self._cfg.server_address}/predictions/{model_name}/reset")
 
         print(response.status_code, response.json())

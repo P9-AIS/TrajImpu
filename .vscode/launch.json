@@ -26,16 +26,12 @@
             }
         },
         {
-            "name": "Python Debugger: train encdec (CUDA debug)",
+            "name": "Python Debugger: predict lerp",
             "type": "debugpy",
             "request": "launch",
-            "module": "src.train_encdec",
+            "module": "src.predict_lerp",
             "console": "integratedTerminal",
-            "justMyCode": true,
-            "env": {
-                "CUDA_LAUNCH_BLOCKING": "1",
-                "TORCH_USE_CUDA_DSA": "1"
-            }
+            "justMyCode": true
         },
         {
             "name": "Python Debugger: upload traj",

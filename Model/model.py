@@ -22,10 +22,6 @@ class Config:
     # encoder
     dim_ais_attr_encoding: int
 
-    # afa module
-    num_layers: int
-    num_head: int
-
     # brits
     dim_rnn_hidden: int
     MIT: bool

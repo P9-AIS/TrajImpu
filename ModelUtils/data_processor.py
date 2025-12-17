@@ -25,12 +25,16 @@ class MaskingStrategy(Enum):
     SUB_SEQUENCE_MISSING = 2
     BLOCK_MISSING = 3
 
+    def __str__(self) -> str:
+        return self.name.title()
+
 
 @dataclass
 class Config:
     traj_len: int = 100
     lead_len: int = 10
-    output_dir: str = "Data"
+    output_dir_data: str = "Data"
+    output_dir_stats: str = "Outputs"
     masking_strategy: MaskingStrategy = MaskingStrategy.POINT_MISSING
     masking_percentage: float = 0.1
     min_sog: float = 1
@@ -43,11 +47,9 @@ class DataProcessor:
     _cfg: Config
     _rng: np.random.Generator
     _num_masked_values: int
-    _depth_force_provider: IForceProvider
 
-    def __init__(self, data_handler: IModelDataAccessHandler, depth_force_provider: IForceProvider, cfg: Config):
+    def __init__(self, data_handler: IModelDataAccessHandler, cfg: Config):
         self._data_handler = data_handler
-        self._depth_force_provider = depth_force_provider
         self._cfg = cfg
         self._rng = np.random.default_rng()
         self._num_masked_values = int(self._cfg.masking_percentage * self._cfg.traj_len)
@@ -101,7 +103,7 @@ class DataProcessor:
         mean_traj_len = float(np.mean(traj_mags).item())
         std_traj_len = float(np.std(traj_mags).item())
 
-        self._output_stats_histogram(traj_mags, dir_path=f"Outputs/Stats", filename="trajectory_lengths_histogram.png",
+        self._output_stats_histogram(traj_mags, dir_path=f"{self._cfg.output_dir_stats}/Stats", filename="trajectory_lengths_histogram.png",
                                      title="Histogram of Trajectory Lengths", xlabel="Trajectory Length (m)", ylabel="Count")
 
         masked_mags = np.sum(self._get_masked_mags(mags, masks[:, 1:, :]), axis=1)
@@ -110,7 +112,7 @@ class DataProcessor:
         mean_masked_len = float(np.mean(masked_mags).item())
         std_masked_len = float(np.std(masked_mags).item())
 
-        self._output_stats_histogram(masked_mags, dir_path=f"Outputs/Stats", filename="trajectory_masked_lengths_histogram.png",
+        self._output_stats_histogram(masked_mags, dir_path=f"{self._cfg.output_dir_stats}/Stats", filename="trajectory_masked_lengths_histogram.png",
                                      title="Histogram of Trajectory Masked Lengths", xlabel="Trajectory Masked Length", ylabel="Count")
 
         ############################################################
@@ -128,7 +130,7 @@ class DataProcessor:
         mean_traj_duration = float(np.mean(traj_durations).item())
         std_traj_duration = float(np.std(traj_durations).item())
 
-        self._output_stats_histogram(traj_durations, dir_path=f"Outputs/Stats", filename="trajectory_durations_histogram.png",
+        self._output_stats_histogram(traj_durations, dir_path=f"{self._cfg.output_dir_stats}/Stats", filename="trajectory_durations_histogram.png",
                                      title="Histogram of Trajectory Durations", xlabel="Trajectory Duration (s)", ylabel="Count")
 
         masked_durations = np.sum(self._get_masked_mags(timestep_diffs, masks[:, 1:, :]), axis=1)
@@ -137,7 +139,7 @@ class DataProcessor:
         mean_masked_duration = float(np.mean(masked_durations).item())
         std_masked_duration = float(np.std(masked_durations).item())
 
-        self._output_stats_histogram(masked_durations, dir_path=f"Outputs/Stats", filename="trajectory_masked_durations_histogram.png",
+        self._output_stats_histogram(masked_durations, dir_path=f"{self._cfg.output_dir_stats}/Stats", filename="trajectory_masked_durations_histogram.png",
                                      title="Histogram of Trajectory Masked Durations", xlabel="Trajectory Masked Duration", ylabel="Count")
 
         return AISStats(
@@ -227,7 +229,7 @@ class DataProcessor:
         return processed_data_file_paths
 
     def _get_dataset_filename(self, date: dt.date) -> str:
-        return f"{self._cfg.output_dir}/AISDatasetProcessed/{self._cfg.traj_len=}-{self._cfg.lead_len=}-{self._cfg.min_sog=}-{self._cfg.max_time_gap=}-{self._cfg.max_traj_gap_distance_m=}-date={date}.npz"
+        return f"{self._cfg.output_dir_data}/AISDatasetProcessed/{self._cfg.traj_len=}-{self._cfg.lead_len=}-{self._cfg.min_sog=}-{self._cfg.max_time_gap=}-{self._cfg.max_traj_gap_distance_m=}-date={date}.npz"
 
     def _process_dataset(self, dataset: AISDatasetRaw) -> AISDatasetProcessed:
         data = self._get_data(dataset)
