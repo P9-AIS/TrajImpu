@@ -10,14 +10,13 @@ from Model.ais_decoder import HeterogeneousAttributeDecoder
 from ModelTypes.ais_col_dict import AISColDict
 from ModelTypes.ais_dataset_masked import AISBatch
 from ModelTypes.ais_stats import AISStats
-from ModelUtils.loss_calculator import LossCalculator, LossOutput, LossTypes
+from ModelUtils.loss_calculator import LossCalculator, LossTypes
 from ForceUtils.geo_converter import GeoConverter as GC
 
 
 @dataclass
 class Config:
     device: str
-    teacher_forcing_ratio: float
 
     # encoder
     dim_ais_attr_encoding: int
@@ -54,7 +53,7 @@ class Model(nn.Module):
     def __str__(self):
         return "force_model"
 
-    def forward(self, ais_batch: AISBatch) -> tuple[LossTypes, tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+    def forward(self, ais_batch: AISBatch, curric_prob: float = 0) -> tuple[LossTypes, tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
         true_lats = ais_batch.lats.to(self._cfg.device)
         true_lons = ais_batch.lons.to(self._cfg.device)
         lats = true_lats.clone().contiguous().to(self._cfg.device)
@@ -111,19 +110,15 @@ class Model(nn.Module):
             last_encoded = encoded[batch_idx, last_mask_idx, :]
             last_truth = observed[batch_idx, last_mask_idx, :]
 
-            # teacher forcing
+            # curriculum learning
             if self.training:
-                tf_mask = (torch.rand(b, device=first_imputed.device) <
-                           self._cfg.teacher_forcing_ratio).float().unsqueeze(-1)
-                first_input = tf_mask * first_encoded + (1 - tf_mask) * first_imputed
+                first_tf_mask = (torch.rand(b, device=first_imputed.device) < curric_prob).float().unsqueeze(-1)
+                last_tf_mask = (torch.rand(b, device=last_imputed.device) < curric_prob).float().unsqueeze(-1)
+
+                last_input = last_tf_mask * last_encoded + (1 - last_tf_mask) * last_imputed
+                first_input = first_tf_mask * first_encoded + (1 - first_tf_mask) * first_imputed
             else:
                 first_input = first_imputed
-
-            if self.training:
-                tf_mask = (torch.rand(b, device=first_imputed.device) <
-                           self._cfg.teacher_forcing_ratio).float().unsqueeze(-1)
-                last_input = tf_mask * last_encoded + (1 - tf_mask) * last_imputed
-            else:
                 last_input = last_imputed
 
             first_input = first_input.unsqueeze(1)

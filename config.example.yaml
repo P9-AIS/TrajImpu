@@ -54,7 +54,6 @@ forceDataUploadHandlerCfg:
 
 modelCfg:
     device: "cuda:0"
-    teacher_forcing_ratio: 0.5
     # encoder
     dim_ais_attr_encoding: 32
 
@@ -64,7 +63,6 @@ modelCfg:
 
 simpleCfg:
     device: "cuda:1"
-    teacher_forcing_ratio: 0.5
     # encoder
     dim_ais_attr_encoding: 32
     
@@ -111,6 +109,8 @@ modelTrainerCfg:
   validation_patience: 3
   validation_every_n_epochs: 5
   upload_every_n_steps: 5
+  curriculum_learning_ratio: 0.5
+  curriculum_learning_decay: 0.97
 
 modelPredicterCfg:
   output_dir: "Outputs"

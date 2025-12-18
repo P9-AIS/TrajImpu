@@ -22,6 +22,8 @@ class Config:
     validation_patience: int = 3
     validation_every_n_epochs: int = 5
     upload_every_n_steps: int = 100
+    curriculum_learning_ratio: float = 0.5
+    curriculum_learning_decay: float = 0.97
 
 
 class Trainer:
@@ -84,6 +86,8 @@ class Trainer:
     def _run_training_batches(self, epoch_no: int) -> float:
         it = tqdm(self._train_data_loader, mininterval=5.0, maxinterval=50.0)
 
+        curriculum_prob = self._cfg.curriculum_learning_ratio * (self._cfg.curriculum_learning_decay ** epoch_no)
+
         total_loss = 0.0
         average_loss = 0.0
         self._model.train()
@@ -92,7 +96,7 @@ class Trainer:
             for batch_no, batch in enumerate(it, start=1):
                 self._optimizer.zero_grad()
 
-                loss, _ = self._model.forward(batch)
+                loss, _ = self._model.forward(batch, curric_prob=curriculum_prob)
                 loss.mse.total_loss.backward()
                 self._optimizer.step()
                 self._global_training_step += 1
@@ -128,7 +132,7 @@ class Trainer:
 
         with torch.no_grad():
             for batch_no, batch in enumerate(it, start=1):
-                loss, _ = self._model.forward(batch)
+                loss, _ = self._model(batch)
 
                 loss = loss.mae.total_loss
                 total_loss += loss.item()
@@ -158,7 +162,7 @@ class Trainer:
 
         with torch.no_grad():
             for batch in it:
-                loss, _ = self._model.forward(batch)
+                loss, _ = self._model(batch)
                 batch_size = batch.observed_data.size(0)
 
                 acc.add_batch(loss, batch_size)
