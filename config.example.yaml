@@ -50,7 +50,7 @@ heatmapGeneratorCfg:
   color_map: 'jet' # Options: 'plasma', 'viridis', 'inferno', 'jet'
 
 forceDataUploadHandlerCfg:
-  server_address: "http://trajviz_devcontainer-devcontainer-1:4000"
+  server_address: "http://server:4000"
 
 modelCfg:
     device: "cuda:0"
@@ -117,4 +117,4 @@ modelPredicterCfg:
   output_dir: "Outputs"
 
 modelDataUploadHandlerCfg:
-  server_address: "http://trajviz_devcontainer-devcontainer-1:4000"
+  server_address: "http://server:4000"

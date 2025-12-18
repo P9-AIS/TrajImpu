@@ -1,9 +1,12 @@
 from osgeo import gdal, osr
 from pyproj import Transformer
+import os
 
 from ForceTypes.area import Area
 from ForceTypes.espg3034_coord import Espg3034Coord
 
+gdal.UseExceptions()
+os.environ["PROJ_LIB"] = "/opt/conda/share/proj"
 
 class Reprojector:
 

@@ -2,16 +2,14 @@
   channels:
     - conda-forge
   dependencies:
-    - pip
-    
+    - pandas
     - psycopg2
     - pyproj
+    - proj
+    - proj-data
     - matplotlib
     - shapely
     - tensorboard
     - tensorflow
     - scipy 
-
-    - pip:
-      - wmm2020
-      - GDAL==3.4.1
+    - gdal

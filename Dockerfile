@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1
 USER root
 WORKDIR /app
 
-RUN apt-get update -y && apt-get install -y cmake build-essential libpq-dev git htop curl sudo wget libgdal-dev
+RUN apt-get update -y && apt-get install -y cmake build-essential git htop curl sudo wget nano
 
 COPY environment.yaml .
 

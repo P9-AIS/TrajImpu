@@ -25,7 +25,7 @@
     "--shm-size",
     "96gb",
     "--network",
-    "trajviz_devcontainer_TrajNet"
+    "trajviz_TrajNet"
   ],
   "mounts": [
     "type=bind,source=/mnt/dataimputationgroup/Data,target=${containerWorkspaceFolder}/Data",
