@@ -2,10 +2,6 @@ import os
 import pickle
 import numpy as np
 
-from ForceTypes.vessel_types import VesselType
-from ModelTypes.ais_col_dict import AISColDict
-from ModelTypes.ais_stats import AISStats
-
 
 class AISDatasetProcessed():
     def __init__(self, data: np.ndarray):
@@ -27,6 +23,17 @@ class AISDatasetProcessed():
         new_data = data[:, :, -2:].copy()
 
         return new_data, timestamps, lats, lons
+
+    def limit_size(self, max_samples: int):
+        if self.data.shape[0] <= max_samples:
+            print(f"Dataset already has {self.data.shape[0]} samples <= {max_samples}, no change.")
+            return
+
+        print(f"Limiting dataset from {self.data.shape[0]} to {max_samples} samples.")
+        self.data = self.data[:max_samples]
+        self.timestamps = self.timestamps[:max_samples]
+        self.lats = self.lats[:max_samples]
+        self.lons = self.lons[:max_samples]
 
     def save(self, path: str):
         os.makedirs(os.path.dirname(path), exist_ok=True)

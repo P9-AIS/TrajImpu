@@ -42,6 +42,7 @@ class Config:
     max_traj_gap_distance_m: float = 50.0
     min_traj_gap_distance_m: float = 0.5
     masking_seed: int = 42
+    max_samples: int = 5000
 
 
 class DataProcessor:
@@ -65,6 +66,7 @@ class DataProcessor:
     def get_masked_data(self, dates: list[dt.date]) -> AISDatasetMasked:
         print("Getting processed data...")
         processed_data = self._get_processed_data(dates)
+        processed_data.limit_size(self._cfg.max_samples)
 
         print("Generating masks for processed data...")
         masks = self._get_masks(processed_data)
