@@ -40,6 +40,7 @@ class Config:
     min_sog: float = 1
     max_time_gap: float = 600.0
     max_traj_gap_distance_m: float = 50.0
+    min_traj_gap_distance_m: float = 0.5
     masking_seed: int = 42
 
 
@@ -350,7 +351,7 @@ class DataProcessor:
 
             distance = GeoUtils.haversine_distance_km(last_lat, last_lon, lat, lon) * 1000.0
 
-            if distance < 0.5:
+            if distance < self._cfg.min_traj_gap_distance_m:
                 continue
 
             if self._is_trajectory_cut(data[curr_trajectory_idxes[-1]], data[i]):
