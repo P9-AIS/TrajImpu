@@ -40,6 +40,7 @@ class Config:
     min_sog: float = 1
     max_time_gap: float = 600.0
     max_traj_gap_distance_m: float = 50.0
+    masking_seed: int = 42
 
 
 class DataProcessor:
@@ -51,7 +52,7 @@ class DataProcessor:
     def __init__(self, data_handler: IModelDataAccessHandler, cfg: Config):
         self._data_handler = data_handler
         self._cfg = cfg
-        self._rng = np.random.default_rng()
+        self._rng = np.random.default_rng(seed=self._cfg.masking_seed)
         self._num_masked_values = int(self._cfg.masking_percentage * self._cfg.traj_len)
 
         if self._num_masked_values % 2 != 0:
