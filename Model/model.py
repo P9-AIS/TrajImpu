@@ -51,7 +51,7 @@ class Model(nn.Module):
         self.loss_calculator = loss_calculator
 
     def __str__(self):
-        return "force_model"
+        return "force"
 
     def forward(self, ais_batch: AISBatch, curric_prob: float = 0) -> tuple[LossTypes, tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
         true_lats = ais_batch.lats.to(self._cfg.device)

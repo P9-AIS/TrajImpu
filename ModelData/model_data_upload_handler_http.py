@@ -42,7 +42,7 @@ class ModelDataUploadHandlerHTTP(IModelDataUploadHandler):
             headers={"Content-Type": "application/octet-stream"}  # just raw bytes
         )
 
-        print(response.status_code, response.json())
+        print(response.status_code, response.json(), "\n")
 
     def upload_predictions(self, model_name, masks, predicted_lats: torch.Tensor, predicted_lons: torch.Tensor,
                            true_lats: torch.Tensor, true_lons: torch.Tensor) -> None:
@@ -71,10 +71,10 @@ class ModelDataUploadHandlerHTTP(IModelDataUploadHandler):
             headers={"Content-Type": "application/octet-stream"}  # just raw bytes
         )
 
-        print(response.status_code, response.json())
+        print(response.status_code, response.json(), "\n")
 
     def reset_predictions(self, model_name) -> None:
         print(f"Resetting predictions for model {model_name} on server at {self._cfg.server_address}...")
         response = requests.post(f"{self._cfg.server_address}/predictions/{model_name}/reset")
 
-        print(response.status_code, response.json())
+        print(response.status_code, response.json(), "\n")

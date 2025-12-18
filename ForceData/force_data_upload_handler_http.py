@@ -8,7 +8,6 @@ import requests
 import gzip
 import json
 from dataclasses import dataclass
-from PIL import Image
 from ForceUtils.geo_converter import GeoConverter as GC
 
 
@@ -39,7 +38,7 @@ class ForceDataUploadHandlerHTTP(IForceDataUploadHandler):
             headers={"Content-Type": "application/octet-stream"}  # just raw bytes
         )
 
-        print(response.status_code, response.json())
+        print(response.status_code, response.json(), "\n")
 
     def upload_image(self, image_path: str, name: str, area_3034: Area) -> None:
         with open(image_path, "rb") as f:

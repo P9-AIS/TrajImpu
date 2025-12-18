@@ -21,7 +21,6 @@ class Config:
     weight_decay: float = 0.0001
     validation_patience: int = 3
     validation_every_n_epochs: int = 5
-    upload_every_n_steps: int = 100
     curriculum_learning_ratio: float = 0.5
     curriculum_learning_decay: float = 0.97
 
@@ -57,16 +56,11 @@ class Trainer:
     def train(self):
         print("Training the model...")
 
-        best_train_loss = float('inf')
         best_average_validation_loss = float('inf')
         epochs_since_improvement = 0
 
         for epoch in range(self._cfg.num_epochs):
             print(f"Epoch {epoch + 1}/{self._cfg.num_epochs}")
-            average_train_loss = self._run_training_batches(epoch)
-
-            if average_train_loss < best_train_loss:
-                best_train_loss = average_train_loss
 
             if (epoch + 1) % self._cfg.validation_every_n_epochs == 0 and epoch != 0:
                 average_validation_loss = self._run_validation_batches(epoch)
@@ -76,6 +70,7 @@ class Trainer:
                 if average_validation_loss < best_average_validation_loss:
                     best_average_validation_loss = average_validation_loss
                     epochs_since_improvement = 0
+                    self.save_model(epoch)
                 else:
                     epochs_since_improvement += 1
 
@@ -115,7 +110,7 @@ class Trainer:
                 it.set_postfix(
                     ordered_dict={
                         "avg_epoch_loss": average_loss,
-                        "epoch": epoch_no,
+                        "epoch": epoch_no + 1,
                     },
                     refresh=False,
                 )
@@ -146,7 +141,7 @@ class Trainer:
                 it.set_postfix(
                     ordered_dict={
                         "avg_epoch_loss": average_loss,
-                        "epoch": epoch_no,
+                        "epoch": epoch_no + 1,
                     },
                     refresh=False,
                 )
@@ -166,7 +161,7 @@ class Trainer:
                 batch_size = batch.observed_data.size(0)
 
                 acc.add_batch(loss, batch_size)
-                it.set_postfix({"epoch": epoch_no}, refresh=False)
+                it.set_postfix({"epoch": epoch_no + 1}, refresh=False)
 
         it.close()
         avg = acc.average()
@@ -175,9 +170,25 @@ class Trainer:
             self._writer.add_scalar(f"test/{name}", val, epoch_no)
 
         print(
-            f"Test Epoch {epoch_no} Complete. "
+            f"Test Epoch {epoch_no + 1} Complete. "
             f"Avg dist Loss: {avg.mae.pos_dist:.4f}"
         )
 
         path = f"{self._cfg.output_dir}/Training/{self._run_name}.csv"
         avg.write_csv(path, epoch=epoch_no)
+
+    def save_model(self, epoch_no: int):
+        save_dir = os.path.join(self._cfg.output_dir, "Models", str(self._model))
+        os.makedirs(save_dir, exist_ok=True)
+
+        filename = f"{self._run_name}_epoch{epoch_no}.pt"
+        save_path = os.path.join(save_dir, filename)
+
+        torch.save({
+            "epoch": epoch_no + 1,
+            "model_state_dict": self._model.state_dict(),
+            "optimizer_state_dict": self._optimizer.state_dict(),
+            "config": self._cfg,
+        }, save_path)
+
+        print(f"Model saved to: {save_path}")

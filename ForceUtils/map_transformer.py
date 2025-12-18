@@ -20,7 +20,7 @@ class MapTransformer:
             for i, transformer in enumerate(transformers, start=1):
                 print(f"\t{i} of {len(transformers)} - {transformer.__name__}")
                 result_map = transformer(result_map)
-            print("Map transformation pipeline complete.")
+            print("Map transformation pipeline complete.\n")
             return result_map
         return composed_transformer
 
