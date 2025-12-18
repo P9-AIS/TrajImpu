@@ -27,7 +27,7 @@ class Config:
     vessel_types: list[VesselType]
     base_tile_size_m: int = 50
     down_scale_factor: int = 1
-    output_dir: str = "Outputs/Traffic"
+    output_dir: str = "Outputs"
     sato_sigmas: list[int] = field(default_factory=lambda: [1, 2, 4, 8])
     gaussian_sigma: float = 16.0
     low_percentile_cutoff: float = 35.0
@@ -50,7 +50,7 @@ class TrafficForceProvider(IForceProvider):
         self._vectormap = self._get_vectormap(self._tilemap)
 
     def _handle_get_tilemap(self):
-        tilemap_dir = f"{self._cfg.output_dir}/Tilemaps"
+        tilemap_dir = f"{self._cfg.output_dir}/Tilemaps/Traffic"
         os.makedirs(tilemap_dir, exist_ok=True)
 
         down_scaled_file_name = self._get_tilemap_file_name(tilemap_dir, self._cfg)

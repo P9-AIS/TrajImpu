@@ -1,0 +1,17 @@
+  name: base
+  channels:
+    - conda-forge
+  dependencies:
+    - pip
+    
+    - psycopg2
+    - pyproj
+    - matplotlib
+    - shapely
+    - tensorboard
+    - tensorflow
+    - scipy 
+
+    - pip:
+      - wmm2020
+      - GDAL==3.4.1

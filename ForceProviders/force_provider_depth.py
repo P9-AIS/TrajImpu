@@ -20,7 +20,7 @@ from ModelTypes.ais_col_dict import AISColDict
 class Config:
     area: Area
     down_scale_factor: int = 1
-    output_dir: str = "Outputs/Depth"
+    output_dir: str = "Outputs"
     gaussian_sigma: float = 16.0
     low_percentile_cutoff: float = 35.0
     high_percentile_cutoff: float = 99.0
@@ -42,7 +42,7 @@ class DepthForceProvider(IForceProvider):
         self._vectormap = self._get_vectormap(self._tilemap)
 
     def _handle_get_tilemap(self):
-        tilemap_dir = f"{self._cfg.output_dir}/Tilemaps"
+        tilemap_dir = f"{self._cfg.output_dir}/Tilemaps/Depth"
 
         down_scaled_file_name = self._get_tilemap_file_name(tilemap_dir, self._cfg)
         original_file_name = self._get_tilemap_file_name(tilemap_dir, replace(self._cfg, down_scale_factor=1))

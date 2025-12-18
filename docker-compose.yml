@@ -1,0 +1,37 @@
+services:
+  trajimpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trajimpu
+    working_dir: /app
+
+    # ---- GPU support ----
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+    # ---- Runtime settings ----
+    shm_size: 96gb
+    stdin_open: true
+    tty: true
+
+    # ---- Volumes (defined once) ----
+    volumes:
+      - /mnt/dataimputationgroup/Outputs:/app/Outputs
+      - /mnt/dataimputationgroup/Data:/app/Data
+      - .:/app
+
+    # ---- Network (optional, from your devcontainer) ----
+    networks:
+      - trajviz
+
+    # ---- Default command (can be overridden) ----
+    command: ["python", "-u", "-m", "src.predict_simple"]
+
+networks:
+  trajviz:
+    external: true
+    name: trajviz_devcontainer_TrajNet

@@ -61,6 +61,7 @@ class Trainer:
 
         for epoch in range(self._cfg.num_epochs):
             print(f"Epoch {epoch + 1}/{self._cfg.num_epochs}")
+            self._run_training_batches(epoch)
 
             if (epoch + 1) % self._cfg.validation_every_n_epochs == 0 and epoch != 0:
                 average_validation_loss = self._run_validation_batches(epoch)

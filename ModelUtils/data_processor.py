@@ -107,8 +107,8 @@ class DataProcessor:
         mean_traj_len = float(np.mean(traj_mags).item())
         std_traj_len = float(np.std(traj_mags).item())
 
-        self._output_stats_histogram(traj_mags, dir_path=f"{self._cfg.output_dir_stats}/Stats", filename="trajectory_lengths_histogram.png",
-                                     title="Histogram of Trajectory Lengths", xlabel="Trajectory Length (m)", ylabel="Count")
+        # self._output_stats_histogram(traj_mags, dir_path=f"{self._cfg.output_dir_stats}/Stats", filename="trajectory_lengths_histogram.png",
+        #                              title="Histogram of Trajectory Lengths", xlabel="Trajectory Length (m)", ylabel="Count")
 
         masked_mags = np.sum(self._get_masked_mags(mags, masks[:, 1:, :]), axis=1)
         min_masked_len = float(np.min(masked_mags).item())
@@ -116,8 +116,8 @@ class DataProcessor:
         mean_masked_len = float(np.mean(masked_mags).item())
         std_masked_len = float(np.std(masked_mags).item())
 
-        self._output_stats_histogram(masked_mags, dir_path=f"{self._cfg.output_dir_stats}/Stats", filename="trajectory_masked_lengths_histogram.png",
-                                     title="Histogram of Trajectory Masked Lengths", xlabel="Trajectory Masked Length", ylabel="Count")
+        # self._output_stats_histogram(masked_mags, dir_path=f"{self._cfg.output_dir_stats}/Stats", filename="trajectory_masked_lengths_histogram.png",
+        #                              title="Histogram of Trajectory Masked Lengths", xlabel="Trajectory Masked Length", ylabel="Count")
 
         ############################################################
 
@@ -134,8 +134,8 @@ class DataProcessor:
         mean_traj_duration = float(np.mean(traj_durations).item())
         std_traj_duration = float(np.std(traj_durations).item())
 
-        self._output_stats_histogram(traj_durations, dir_path=f"{self._cfg.output_dir_stats}/Stats", filename="trajectory_durations_histogram.png",
-                                     title="Histogram of Trajectory Durations", xlabel="Trajectory Duration (s)", ylabel="Count")
+        # self._output_stats_histogram(traj_durations, dir_path=f"{self._cfg.output_dir_stats}/Stats", filename="trajectory_durations_histogram.png",
+        #                              title="Histogram of Trajectory Durations", xlabel="Trajectory Duration (s)", ylabel="Count")
 
         masked_durations = np.sum(self._get_masked_mags(timestep_diffs, masks[:, 1:, :]), axis=1)
         min_masked_duration = float(np.min(masked_durations).item())
@@ -143,8 +143,8 @@ class DataProcessor:
         mean_masked_duration = float(np.mean(masked_durations).item())
         std_masked_duration = float(np.std(masked_durations).item())
 
-        self._output_stats_histogram(masked_durations, dir_path=f"{self._cfg.output_dir_stats}/Stats", filename="trajectory_masked_durations_histogram.png",
-                                     title="Histogram of Trajectory Masked Durations", xlabel="Trajectory Masked Duration", ylabel="Count")
+        # self._output_stats_histogram(masked_durations, dir_path=f"{self._cfg.output_dir_stats}/Stats", filename="trajectory_masked_durations_histogram.png",
+        #                              title="Histogram of Trajectory Masked Durations", xlabel="Trajectory Masked Duration", ylabel="Count")
 
         return AISStats(
             seq_len=seq_len,
