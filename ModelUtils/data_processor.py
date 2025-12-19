@@ -22,8 +22,8 @@ import matplotlib.pyplot as plt
 
 class MaskingStrategy(Enum):
     POINT_MISSING = 1
-    SUB_SEQUENCE_MISSING = 2
-    BLOCK_MISSING = 3
+    BLOCK_MISSING = 2
+    MIXED_MISSING = 3
 
     def __str__(self) -> str:
         return self.name.title()
@@ -269,21 +269,51 @@ class DataProcessor:
         seq_length = dataset.data.shape[1]
         num_attributes = dataset.data.shape[2]
 
-        masks = np.ones((num_trajs, seq_length, num_attributes), dtype=np.int8)
-
         match self._cfg.masking_strategy:
             case MaskingStrategy.POINT_MISSING:
-                for i in range(num_trajs):
-                    missing_indices = self._rng.choice(
-                        range(self._cfg.lead_len, seq_length - self._cfg.lead_len),
-                        self._num_masked_values,
-                        replace=False)
-                    masks[i, missing_indices, :] = 0.0
+                masks = DataProcessor._point_missing_masking(
+                    num_trajs, seq_length, num_attributes,
+                    self._cfg.lead_len, self._num_masked_values, self._rng)
             case MaskingStrategy.BLOCK_MISSING:
-                for i in range(num_trajs):
-                    missing_indices = np.arange(self._num_masked_values) + self._cfg.lead_len + \
-                        self._rng.integers(0, seq_length - self._cfg.lead_len - self._num_masked_values)
-                    masks[i, missing_indices, :] = 0.0
+                masks = DataProcessor._block_missing_masking(
+                    num_trajs, seq_length, num_attributes,
+                    self._cfg.lead_len, self._num_masked_values, self._rng)
+            case MaskingStrategy.MIXED_MISSING:
+                point_masks = DataProcessor._point_missing_masking(
+                    num_trajs // 2, seq_length, num_attributes,
+                    self._cfg.lead_len, self._num_masked_values, self._rng)
+                block_masks = DataProcessor._block_missing_masking(
+                    num_trajs - num_trajs // 2, seq_length, num_attributes,
+                    self._cfg.lead_len, self._num_masked_values, self._rng)
+
+                masks = np.concatenate((point_masks, block_masks), axis=0)
+            case _:
+                raise ValueError(f"Unknown masking strategy: {self._cfg.masking_strategy}")
+
+        return masks
+
+    @staticmethod
+    def _point_missing_masking(num_trajs: int, seq_length: int, num_attributes: int, lead_len: int, num_masked_values: int, rng: np.random.Generator) -> np.ndarray:
+        masks = np.ones((num_trajs, seq_length, num_attributes), dtype=np.int8)
+
+        for i in range(num_trajs):
+            missing_indices = rng.choice(
+                range(lead_len, seq_length - lead_len),
+                num_masked_values,
+                replace=False)
+            masks[i, missing_indices, :] = 0.0
+
+        return masks
+
+    @staticmethod
+    def _block_missing_masking(num_trajs: int, seq_length: int, num_attributes: int, lead_len: int, num_masked_values: int, rng: np.random.Generator) -> np.ndarray:
+        masks = np.ones((num_trajs, seq_length, num_attributes), dtype=np.int8)
+
+        for i in range(num_trajs):
+            missing_indices = np.arange(num_masked_values) + lead_len + \
+                rng.integers(0, seq_length - lead_len - num_masked_values)
+            masks[i, missing_indices, :] = 0.0
+
         return masks
 
     @staticmethod
