@@ -34,6 +34,7 @@ class LossCalculator:
 
     @staticmethod
     def get_loss_type(loss_type: str,
+                      training: bool,
                       full_pos_pred: torch.Tensor, full_pos_true: torch.Tensor,
                       pos_pred: torch.Tensor, pos_true: torch.Tensor,
                       deltas_pred: torch.Tensor, deltas_true: torch.Tensor,
@@ -64,7 +65,10 @@ class LossCalculator:
 
         total_loss = pos_distance_loss + delta_hyp_loss + 1000 * total_consistency_loss + 10 * force_loss
 
-        frechet_distance_loss = LossCalculator._frechet_distance(full_pos_pred, full_pos_true)
+        if not training:
+            frechet_distance_loss = LossCalculator._frechet_distance(full_pos_pred, full_pos_true)
+        else:
+            frechet_distance_loss = torch.tensor(0.0, device=full_pos_pred.device)
 
         return LossOutput(
             total_loss=total_loss,
@@ -92,17 +96,18 @@ class LossCalculator:
             raise ValueError(f"Unsupported loss function: {loss_func}")
 
     def calculate_loss(self,
+                       training: bool,
                        full_pos_pred: torch.Tensor, full_pos_true: torch.Tensor,
                        pos_pred: torch.Tensor, pos_true: torch.Tensor,
                        deltas_pred: torch.Tensor, deltas_true: torch.Tensor,
                        total_consistency_loss: torch.Tensor,
                        decoded_forces: torch.Tensor, true_forces: torch.Tensor) -> LossTypes:
         return LossTypes(
-            mse=self.get_loss_type("mse", full_pos_pred, full_pos_true, pos_pred, pos_true, deltas_pred, deltas_true,
+            mse=self.get_loss_type("mse", training, full_pos_pred, full_pos_true, pos_pred, pos_true, deltas_pred, deltas_true,
                                    total_consistency_loss, decoded_forces, true_forces),
-            mae=self.get_loss_type("mae", full_pos_pred, full_pos_true, pos_pred, pos_true, deltas_pred, deltas_true,
+            mae=self.get_loss_type("mae", training, full_pos_pred, full_pos_true, pos_pred, pos_true, deltas_pred, deltas_true,
                                    total_consistency_loss, decoded_forces, true_forces),
-            smape=self.get_loss_type("smape", full_pos_pred, full_pos_true, pos_pred, pos_true, deltas_pred, deltas_true,
+            smape=self.get_loss_type("smape", training, full_pos_pred, full_pos_true, pos_pred, pos_true, deltas_pred, deltas_true,
                                      total_consistency_loss, decoded_forces, true_forces)
         )
 

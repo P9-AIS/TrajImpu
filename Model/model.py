@@ -198,6 +198,7 @@ class Model(nn.Module):
         full_traj_true = torch.stack([true_lats, true_lons], dim=-1)
 
         loss = self.loss_calculator.calculate_loss(
+            self.training,
             full_traj_pred, full_traj_true,
             all_pos_pred, all_pos_true,
             all_deltas_pred, all_deltas_true,

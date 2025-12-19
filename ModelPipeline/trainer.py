@@ -62,6 +62,7 @@ class Trainer:
         for epoch in range(self._cfg.num_epochs):
             print(f"Epoch {epoch + 1}/{self._cfg.num_epochs}")
             self._run_training_batches(epoch)
+            self.save_model(epoch)
 
             if (epoch + 1) % self._cfg.validation_every_n_epochs == 0 and epoch != 0:
                 average_validation_loss = self._run_validation_batches(epoch)
@@ -71,7 +72,6 @@ class Trainer:
                 if average_validation_loss < best_average_validation_loss:
                     best_average_validation_loss = average_validation_loss
                     epochs_since_improvement = 0
-                    self.save_model(epoch)
                 else:
                     epochs_since_improvement += 1
 
@@ -182,7 +182,7 @@ class Trainer:
         save_dir = os.path.join(self._cfg.output_dir, "Models", str(self._model))
         os.makedirs(save_dir, exist_ok=True)
 
-        filename = f"{self._run_name}_epoch{epoch_no}.pt"
+        filename = f"{self._run_name}_epoch{epoch_no + 1}.pt"
         save_path = os.path.join(save_dir, filename)
 
         torch.save({

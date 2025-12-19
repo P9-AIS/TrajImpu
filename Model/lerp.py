@@ -125,6 +125,7 @@ class Model(nn.Module):
 
         # --- Compute loss ---
         loss = self.loss_calculator.calculate_loss(
+            self.training,
             full_traj_pred,
             full_traj_true,
             pos_pred,
