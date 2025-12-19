@@ -144,6 +144,7 @@ ConfigVisitorRegistry.register(
         masking_percentage=data["masking_percentage"],
         min_sog=data["min_sog"],
         max_time_gap=data["max_time_gap"],
+        min_traj_gap_distance_m=data["min_traj_gap_distance_m"],
         max_traj_gap_distance_m=data["max_traj_gap_distance_m"],
         max_samples=data["max_samples"]
     )

@@ -233,7 +233,7 @@ class DataProcessor:
         return processed_data_file_paths
 
     def _get_dataset_filename(self, date: dt.date) -> str:
-        return f"{self._cfg.output_dir_data}/AISDatasetProcessed/{self._cfg.traj_len=}-{self._cfg.lead_len=}-{self._cfg.min_sog=}-{self._cfg.max_time_gap=}-{self._cfg.max_traj_gap_distance_m=}-date={date}.npz"
+        return f"{self._cfg.output_dir_data}/AISDatasetProcessed/{self._cfg.traj_len=}-{self._cfg.lead_len=}-{self._cfg.min_sog=}-{self._cfg.max_time_gap=}-{self._cfg.min_traj_gap_distance_m=}-{self._cfg.max_traj_gap_distance_m=}-date={date}.npz"
 
     def _process_dataset(self, dataset: AISDatasetRaw) -> AISDatasetProcessed:
         data = self._get_data(dataset)
@@ -395,8 +395,10 @@ class DataProcessor:
             last_lat = lat
             last_lon = lon
 
+
         if curr_trajectory_idxes:
             candidate_trajectories.append(curr_trajectory_idxes)
+
 
         same_length_trajectories = []
 
@@ -447,8 +449,8 @@ class DataProcessor:
             segment_m = GeoUtils.haversine_distance_km(lat1, lon1, lat2, lon2) * 1000.0
             total_distance_m += segment_m
 
-        if total_distance_m < 500 or total_distance_m > 10000:
-            return False
+        # if total_distance_m < 500 or total_distance_m > 10000:
+        #     return False
 
         return True
 
@@ -482,7 +484,7 @@ class DataProcessor:
         min_total_angle: minimum sum of angles between segments to exclude straight lines
         max_total_angle: maximum sum of angles to exclude jagged trajectories
         """
-        def trajectory_smoothness_coarse(traj: np.ndarray, step: int = 10) -> float:
+        def trajectory_smoothness_coarse(traj: np.ndarray, step: int) -> float:
             """
             Compute smoothness using coarse-grained segments.
             - traj: np.ndarray of shape (T, D), where [:,1:3] are N/E coordinates
@@ -522,8 +524,8 @@ class DataProcessor:
 
         filtered = []
         for traj in trajectories:
-            score = trajectory_smoothness_coarse(traj)
-            if 45 <= score <= 360:
+            score = trajectory_smoothness_coarse(traj, step=2)
+            if 100 <= score <= 400:
                 filtered.append(traj)
 
         return filtered

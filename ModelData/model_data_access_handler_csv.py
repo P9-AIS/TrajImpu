@@ -200,6 +200,9 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
 
         with open("Data/assets/eez.json", "r") as f:
             zone = json.load(f)
+        
+        with open("Data/assets/eeez.json", "r") as f:
+            zone_small = json.load(f)
 
         if os.path.exists(np_file_path):
             print(f"{np_file_path} np file exists - skipping...")
@@ -255,6 +258,14 @@ class ModelDataAccessHandlerCSV(IModelDataAccessHandler):
         mask = []
         for point in tqdm(points, desc="Filtering points by area"):
             mask.append(multipolygon.contains(point))
+
+        df = df[mask]
+
+        polygon = shape(zone_small["features"][0]["geometry"])
+        points = [Point(lon, lat) for lat, lon in zip(df['Latitude'], df['Longitude'])]
+        mask = []
+        for point in tqdm(points, desc="Filtering points by area"):
+            mask.append(polygon.contains(point))
 
         df = df[mask]
 
