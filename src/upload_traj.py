@@ -12,7 +12,7 @@ if __name__ == "__main__":
     data_processor = DataProcessor(data_handler, cfg.modelDataProcessorCfg)
     upload_handler = ModelDataUploadHandlerHTTP(cfg.modelDataUploadHandlerCfg)
 
-    dates = [dt.date(2024, 3, i) for i in range(1, 20)]
+    dates = [dt.date(2024, 3, i) for i in range(1, 32)] + [dt.date(2024, 4, i) for i in range(1, 10)]
 
     masked_data = data_processor.get_masked_data(dates)
     upload_handler.upload_trajectories(masked_data, 0, -1)

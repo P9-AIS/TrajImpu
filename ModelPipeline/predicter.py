@@ -90,5 +90,4 @@ class Predicter:
             all_true_lats,
             all_true_lons,
             avg.mae.as_dict(),
-            avg.smape.as_dict(),
         )

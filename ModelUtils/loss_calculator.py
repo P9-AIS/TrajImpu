@@ -27,7 +27,6 @@ class LossOutput:
 class LossTypes:
     mse: LossOutput
     mae: LossOutput
-    smape: LossOutput
 
 
 class LossCalculator:
@@ -68,7 +67,7 @@ class LossCalculator:
         if not training:
             frechet_distance_loss = LossCalculator._frechet_distance(full_pos_pred, full_pos_true)
         else:
-            frechet_distance_loss = torch.tensor(0.0, device=full_pos_pred.device)
+            frechet_distance_loss = 0.0
 
         return LossOutput(
             total_loss=total_loss,
@@ -85,13 +84,6 @@ class LossCalculator:
             return torch.nn.functional.mse_loss(prediction, truth)
         elif loss_func == "mae":
             return torch.nn.functional.l1_loss(prediction, truth)
-        elif loss_func == "smape":
-            # SMAPE formula: 2 * |y_pred - y_true| / (|y_pred| + |y_true|)
-            numerator = torch.abs(prediction - truth)
-            denominator = torch.abs(prediction) + torch.abs(truth)
-
-            epsilon = 1e-8
-            return 2 * torch.mean(numerator / (denominator + epsilon))
         else:
             raise ValueError(f"Unsupported loss function: {loss_func}")
 
@@ -107,8 +99,6 @@ class LossCalculator:
                                    total_consistency_loss, decoded_forces, true_forces),
             mae=self.get_loss_type("mae", training, full_pos_pred, full_pos_true, pos_pred, pos_true, deltas_pred, deltas_true,
                                    total_consistency_loss, decoded_forces, true_forces),
-            smape=self.get_loss_type("smape", training, full_pos_pred, full_pos_true, pos_pred, pos_true, deltas_pred, deltas_true,
-                                     total_consistency_loss, decoded_forces, true_forces)
         )
 
     @staticmethod
@@ -211,18 +201,15 @@ class LossTotals:
 @dataclass
 class LossAccumulator:
     mae: LossTotals = field(default_factory=LossTotals)
-    smape: LossTotals = field(default_factory=LossTotals)
     count: int = 0
 
     def add_batch(self, loss, batch_size: int):
         self.mae.add(loss.mae, batch_size)
-        self.smape.add(loss.smape, batch_size)
         self.count += batch_size
 
     def average(self) -> "LossAccumulator":
         return LossAccumulator(
             mae=self.mae.average(self.count),
-            smape=self.smape.average(self.count),
             count=self.count,
         )
 
@@ -232,7 +219,6 @@ class LossAccumulator:
         if include_epoch:
             headers.append("epoch")
         headers += LossTotals.headers("mae")
-        headers += LossTotals.headers("smape")
         return headers
 
     def csv_row(self, epoch: int | None = None):
@@ -241,7 +227,6 @@ class LossAccumulator:
             row.append(epoch)
 
         row += self.mae.as_list()
-        row += self.smape.as_list()
         return [f"{v:.6f}" if isinstance(v, float) else v for v in row]
 
     def write_csv(
