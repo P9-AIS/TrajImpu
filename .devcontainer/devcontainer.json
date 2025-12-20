@@ -15,7 +15,12 @@
     "vscode": {
       "extensions": [
         "ms-vsliveshare.vsliveshare",
-        "ReprEng.csv"
+        "ReprEng.csv",
+        "ms-python.vscode-python-envs",
+        "ms-python.vscode-pylance",
+        "ms-python.python",
+        "ms-python.debugpy",
+        "ms-python.autopep8"
       ]
     }
   },
