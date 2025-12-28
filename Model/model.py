@@ -54,10 +54,10 @@ class Model(nn.Module):
         return "force"
 
     def forward(self, ais_batch: AISBatch, curric_prob: float = 0) -> tuple[LossTypes, tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
-        true_lats = ais_batch.lats.to(self._cfg.device)
-        true_lons = ais_batch.lons.to(self._cfg.device)
-        lats = true_lats.clone().contiguous().to(self._cfg.device)
-        lons = true_lons.clone().contiguous().to(self._cfg.device)
+        northerns = ais_batch.northerns.contiguous().to(self._cfg.device)
+        easterns = ais_batch.easterns.contiguous().to(self._cfg.device)
+        true_northerns = northerns.contiguous().clone().to(self._cfg.device).detach()
+        true_easterns = easterns.contiguous().clone().to(self._cfg.device).detach()
         timestamps = ais_batch.observed_timestamps.contiguous().to(self._cfg.device)
         observed = ais_batch.observed_data.contiguous().to(self._cfg.device)
 
@@ -80,7 +80,7 @@ class Model(nn.Module):
         all_pos_true = []
 
         encoded = self.ais_encoder(observed)
-        forces, forces_true = self.force_encoder(lats, lons)
+        forces, forces_true = self.force_encoder(northerns, easterns)
         features = torch.cat((encoded, forces), dim=-1)  # shape [b, s, e * 3]
 
         b, s, f = features.size()
@@ -133,35 +133,37 @@ class Model(nn.Module):
             first_decoded = self.ais_decoder(first_input)
             last_decoded = self.ais_decoder(last_input)
 
-            eastern_deltas_first = first_decoded[batch_idx, :, AISColDict.EASTERN_DELTA.value].detach()
-            northern_deltas_first = first_decoded[batch_idx, :, AISColDict.NORTHERN_DELTA.value].detach()
-            eastern_deltas_last = last_decoded[batch_idx, :, AISColDict.EASTERN_DELTA.value].detach()
-            northern_deltas_last = last_decoded[batch_idx, :, AISColDict.NORTHERN_DELTA.value].detach()
+            eastern_deltas_first = first_decoded[batch_idx, :, AISColDict.EASTERN_DELTA.value]
+            northern_deltas_first = first_decoded[batch_idx, :, AISColDict.NORTHERN_DELTA.value]
+            eastern_deltas_last = last_decoded[batch_idx, :, AISColDict.EASTERN_DELTA.value]
+            northern_deltas_last = last_decoded[batch_idx, :, AISColDict.NORTHERN_DELTA.value]
 
             # udpate lat lons based on deltas
-            self.update_lat_lon(lats, lons, eastern_deltas_first, northern_deltas_first,
+            self.update_lat_lon(easterns, northerns, eastern_deltas_first, northern_deltas_first,
                                 first_mask_idx, direction="forward")
-            self.update_lat_lon(lats, lons, eastern_deltas_last, northern_deltas_last,
+            self.update_lat_lon(easterns, northerns, eastern_deltas_last, northern_deltas_last,
                                 last_mask_idx, direction="backward")
 
             # get updated lat lons
-            first_lat_pred = lats[batch_idx, first_mask_idx]
-            first_lon_pred = lons[batch_idx, first_mask_idx]
-            last_lat_pred = lats[batch_idx, last_mask_idx]
-            last_lon_pred = lons[batch_idx, last_mask_idx]
+            first_northern_pred = northerns[batch_idx, first_mask_idx]
+            first_eastern_pred = easterns[batch_idx, first_mask_idx]
+            last_northern_pred = northerns[batch_idx, last_mask_idx]
+            last_eastern_pred = easterns[batch_idx, last_mask_idx]
 
-            first_lat_truth = true_lats[batch_idx, first_mask_idx]
-            first_lon_truth = true_lons[batch_idx, first_mask_idx]
-            last_lat_truth = true_lats[batch_idx, last_mask_idx]
-            last_lon_truth = true_lons[batch_idx, last_mask_idx]
+            first_northern_truth = true_northerns[batch_idx, first_mask_idx]
+            first_eastern_truth = true_easterns[batch_idx, first_mask_idx]
+            last_northern_truth = true_northerns[batch_idx, last_mask_idx]
+            last_eastern_truth = true_easterns[batch_idx, last_mask_idx]
 
-            first_pos_pred = torch.stack([first_lat_pred, first_lon_pred], dim=-1).unsqueeze(1)
-            last_pos_pred = torch.stack([last_lat_pred, last_lon_pred], dim=-1).unsqueeze(1)
-            first_pos_true = torch.stack([first_lat_truth, first_lon_truth], dim=-1).unsqueeze(1)
-            last_pos_true = torch.stack([last_lat_truth, last_lon_truth], dim=-1).unsqueeze(1)
+            first_pos_pred = torch.stack([first_northern_pred, first_eastern_pred], dim=-1).unsqueeze(1)
+            last_pos_pred = torch.stack([last_northern_pred, last_eastern_pred], dim=-1).unsqueeze(1)
+            first_pos_true = torch.stack([first_northern_truth, first_eastern_truth], dim=-1).unsqueeze(1)
+            last_pos_true = torch.stack([last_northern_truth, last_eastern_truth], dim=-1).unsqueeze(1)
 
-            first_forces, _ = self.force_encoder(first_lat_pred.unsqueeze(1), first_lon_pred.unsqueeze(1))
-            last_forces, _ = self.force_encoder(last_lat_pred.unsqueeze(1), last_lon_pred.unsqueeze(1))
+            first_forces, _ = self.force_encoder(first_northern_pred.clone().unsqueeze(
+                1).detach(), first_eastern_pred.clone().unsqueeze(1).detach())
+            last_forces, _ = self.force_encoder(last_northern_pred.clone().unsqueeze(
+                1).detach(), last_eastern_pred.clone().unsqueeze(1).detach())
 
             first_features = torch.cat((first_encoded, first_forces), dim=-1)
             last_features = torch.cat((last_encoded, last_forces), dim=-1)
@@ -194,8 +196,8 @@ class Model(nn.Module):
 
         forces_pred = self.force_decoder(forces)
 
-        full_traj_pred = torch.stack([lats, lons], dim=-1)
-        full_traj_true = torch.stack([true_lats, true_lons], dim=-1)
+        full_traj_pred = torch.stack([northerns, easterns], dim=-1)
+        full_traj_true = torch.stack([true_northerns, true_easterns], dim=-1)
 
         loss = self.loss_calculator.calculate_loss(
             self.training,
@@ -205,33 +207,33 @@ class Model(nn.Module):
             total_consistency_loss,
             forces_pred, forces_true)
 
-        return loss, (lats, lons, true_lats, true_lons)
+        return loss, (northerns, easterns, true_northerns, true_easterns)
 
-    def update_lat_lon(self, lats: torch.Tensor, lons: torch.Tensor, eastern_deltas: torch.Tensor,
+    def update_lat_lon(self, easterns: torch.Tensor, northerns: torch.Tensor, eastern_deltas: torch.Tensor,
                        northern_deltas: torch.Tensor, mask_indices: torch.Tensor, direction: str) -> None:
-        b, s = lats.size()
-        batch_idx = torch.arange(b, device=lats.device)
+        b, s = northerns.size()
+        batch_idx = torch.arange(b, device=northerns.device)
         if direction == "forward":
             prev_mask_indices = mask_indices - 1
-            lats_to_update = lats[batch_idx, prev_mask_indices]
-            lons_to_update = lons[batch_idx, prev_mask_indices]
-            E, N = GC.espg4326_to_epsg3034_batch_tensor(lons_to_update, lats_to_update)
-            E += eastern_deltas.squeeze(-1)
-            N += northern_deltas.squeeze(-1)
-            lons_updated, lats_updated = GC.epsg3034_to_espg4326_batch_tensor(E, N)
-            lats[batch_idx, mask_indices] = lats_updated
-            lons[batch_idx, mask_indices] = lons_updated
+            northerns_to_update = northerns[batch_idx, prev_mask_indices]
+            easterns_to_update = easterns[batch_idx, prev_mask_indices]
+
+            easterns_to_update += eastern_deltas.squeeze(-1)
+            northerns_to_update += northern_deltas.squeeze(-1)
+
+            northerns[batch_idx, mask_indices] = northerns_to_update
+            easterns[batch_idx, mask_indices] = easterns_to_update
 
         elif direction == "backward":
             prev_mask_indices = mask_indices + 1
-            lats_to_update = lats[batch_idx, prev_mask_indices]
-            lons_to_update = lons[batch_idx, prev_mask_indices]
-            E, N = GC.espg4326_to_epsg3034_batch_tensor(lons_to_update, lats_to_update)
-            E -= eastern_deltas.squeeze(-1)
-            N -= northern_deltas.squeeze(-1)
-            lons_updated, lats_updated = GC.epsg3034_to_espg4326_batch_tensor(E, N)
-            lats[batch_idx, mask_indices] = lats_updated
-            lons[batch_idx, mask_indices] = lons_updated
+            northerns_to_update = northerns[batch_idx, prev_mask_indices]
+            easterns_to_update = easterns[batch_idx, prev_mask_indices]
+
+            easterns_to_update -= eastern_deltas.squeeze(-1)
+            northerns_to_update -= northern_deltas.squeeze(-1)
+
+            northerns[batch_idx, mask_indices] = northerns_to_update
+            easterns[batch_idx, mask_indices] = easterns_to_update
 
 
 def _prepare_brits_data(timestamps, encoded_data, masks):

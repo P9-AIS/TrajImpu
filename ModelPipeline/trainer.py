@@ -36,7 +36,7 @@ class Trainer:
         self._cfg = config
         self._data_description = f"{data_processor_cfg.masking_strategy}_{data_processor_cfg.masking_percentage}"
 
-        self._run_name = f"run_{model}_{self._data_description}_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        self._run_name = f"run_{model}_{self._data_description}_{dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
         log_dir = os.path.join(self._cfg.output_dir, "Tensorboard", self._run_name)
         self._writer = SummaryWriter(log_dir=log_dir, flush_secs=1)
 
@@ -58,7 +58,7 @@ class Trainer:
 
         best_average_validation_loss = float('inf')
         epochs_since_improvement = 0
-
+        # torch.autograd.set_detect_anomaly(True)
         for epoch in range(self._cfg.num_epochs):
             print(f"Epoch {epoch + 1}/{self._cfg.num_epochs}")
             self._run_training_batches(epoch)

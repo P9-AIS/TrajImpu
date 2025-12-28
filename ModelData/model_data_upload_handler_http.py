@@ -6,6 +6,7 @@ import requests
 import gzip
 import json
 from dataclasses import dataclass
+from ForceUtils.geo_converter import GeoConverter as gc
 
 
 @dataclass
@@ -23,12 +24,11 @@ class ModelDataUploadHandlerHTTP(IModelDataUploadHandler):
         if end_idx == -1:
             end_idx = len(dataset)
 
-        lats = dataset.lats[start_idx:end_idx]
-        lons = dataset.lons[start_idx:end_idx]
-        data = dataset.data[start_idx:end_idx]
+        northerns = dataset.northerns[start_idx:end_idx]
+        easterns = dataset.easterns[start_idx:end_idx]
 
-        data[:, :, 0] = lats
-        data[:, :, 1] = lons
+        lons, lats = gc.espg3034_to_epsg4326_batch(easterns, northerns)
+        data = np.stack((lats, lons), axis=-1)
 
         data = {"trajectory": data.tolist()}
 
@@ -44,15 +44,18 @@ class ModelDataUploadHandlerHTTP(IModelDataUploadHandler):
 
         print(response.status_code, response.json(), "\n")
 
-    def upload_predictions(self, model_name, masks, predicted_lats: torch.Tensor, predicted_lons: torch.Tensor,
-                           true_lats: torch.Tensor, true_lons: torch.Tensor) -> None:
+    def upload_predictions(self, model_name, masks, predicted_northerns: torch.Tensor, predicted_easterns: torch.Tensor,
+                           true_northerns: torch.Tensor, true_easterns: torch.Tensor) -> None:
 
         masks_new = masks[..., 0]
 
+        pred_lons, pred_lats = gc.epsg3034_to_espg4326_batch_tensor(predicted_easterns, predicted_northerns)
+        true_lons, true_lats = gc.epsg3034_to_espg4326_batch_tensor(true_easterns, true_northerns)
+
         concat = torch.stack([
             masks_new,
-            predicted_lats,
-            predicted_lons,
+            pred_lats,
+            pred_lons,
             true_lats,
             true_lons
         ], dim=-1)

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 from ForceProviders.i_force_provider import IForceProvider
+from ForceUtils.geo_converter import GeoConverter as gc
 
 
 class ForceEncoder(nn.Module):
@@ -17,7 +18,9 @@ class ForceEncoder(nn.Module):
             nn.LayerNorm(feature_dim)
         )
 
-    def forward(self, lats: torch.Tensor, lons: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, northerns: torch.Tensor, easterns: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        lons, lats = gc.epsg3034_to_espg4326_batch_tensor(easterns, northerns)  # [b, s]
+
         lat_lons = torch.stack((lats, lons), dim=-1)  # [b, s, 2]
         raw_forces = self._force_provider.get_forces_tensor(lat_lons).to(lats.device)  # [b, s, 2]
 

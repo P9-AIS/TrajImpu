@@ -40,7 +40,11 @@ class LossCalculator:
                       total_consistency_loss: torch.Tensor,
                       forces_pred: torch.Tensor, forces_true: torch.Tensor) -> LossOutput:
 
-        pos_distance = LossCalculator._euclidean_distance(pos_pred, pos_true)
+        pos_distance = LossCalculator._calc_hyp(
+            pos_pred[:, :, AISColDict.NORTHERN_DELTA.value],
+            pos_true[:, :, AISColDict.NORTHERN_DELTA.value],
+            pos_pred[:, :, AISColDict.EASTERN_DELTA.value],
+            pos_true[:, :, AISColDict.EASTERN_DELTA.value])
         pos_distance_zero = torch.zeros_like(pos_distance)
 
         pos_distance_loss = LossCalculator.get_loss(
@@ -62,10 +66,15 @@ class LossCalculator:
 
         force_loss = LossCalculator.get_loss(loss_type, forces_pred, forces_true)
 
-        total_loss = pos_distance_loss + delta_hyp_loss + 1000 * total_consistency_loss + 10 * force_loss
+        total_loss = pos_distance_loss + 10 * delta_hyp_loss  # + 1000 * total_consistency_loss + 10 * force_loss
 
         if not training:
-            frechet_distance_loss = LossCalculator._frechet_distance(full_pos_pred, full_pos_true)
+            full_pos_distance = LossCalculator._calc_hyp(
+                full_pos_pred[:, :, AISColDict.NORTHERN_DELTA.value],
+                full_pos_true[:, :, AISColDict.NORTHERN_DELTA.value],
+                full_pos_pred[:, :, AISColDict.EASTERN_DELTA.value],
+                full_pos_true[:, :, AISColDict.EASTERN_DELTA.value])
+            frechet_distance_loss = LossCalculator._frechet_distance(full_pos_distance)
         else:
             frechet_distance_loss = 0.0
 
@@ -102,61 +111,37 @@ class LossCalculator:
         )
 
     @staticmethod
-    def _calc_hyp(imputed_lat, ground_truth_lat, imputed_lon, ground_truth_lon) -> torch.Tensor:
-        return torch.hypot(imputed_lat - ground_truth_lat, imputed_lon - ground_truth_lon)
+    def _calc_hyp(northern_pred, northern_true, eastern_pred, eastern_true) -> torch.Tensor:
+        dx = northern_pred - northern_true
+        dy = eastern_pred - eastern_true
+        eps = 1e-6
+        return torch.sqrt(dx * dx + dy * dy + eps)
 
     @staticmethod
-    def _euclidean_distance(pos_pred, pos_true) -> torch.Tensor:
-        lat1 = pos_pred[..., 0]
-        lon1 = pos_pred[..., 1]
-        lat2 = pos_true[..., 0]
-        lon2 = pos_true[..., 1]
-
-        R = 6371000.0  # Earth radius in meters
-        lat1 = torch.deg2rad(lat1)
-        lon1 = torch.deg2rad(lon1)
-        lat2 = torch.deg2rad(lat2)
-        lon2 = torch.deg2rad(lon2)
-
-        dlat = lat2 - lat1
-        dlon = lon2 - lon1
-        mean_lat = (lat1 + lat2) / 2.0
-
-        x = dlon * torch.cos(mean_lat)
-        y = dlat
-
-        return R * torch.sqrt(x * x + y * y)
-
-    @staticmethod
-    def _frechet_distance(pred: torch.Tensor, true: torch.Tensor) -> float:
-        dist = LossCalculator._euclidean_distance(pred, true)  # (T, T)
+    def _frechet_distance(dist: torch.Tensor) -> float:
         T = dist.shape[0]
+        ca = torch.empty((T, T), device=dist.device)
 
-        ca = torch.full((T, T), -1.0, device=pred.device)
+        ca[0, 0] = dist[0, 0]
 
-        def recurse(i, j):
-            if ca[i, j] > -0.5:
-                return ca[i, j]
-            elif i == 0 and j == 0:
-                ca[i, j] = dist[0, 0]
-            elif i > 0 and j == 0:
-                ca[i, j] = torch.max(recurse(i - 1, 0), dist[i, 0])
-            elif i == 0 and j > 0:
-                ca[i, j] = torch.max(recurse(0, j - 1), dist[0, j])
-            elif i > 0 and j > 0:
+        for i in range(1, T):
+            ca[i, 0] = torch.max(ca[i - 1, 0], dist[i, 0])
+
+        for j in range(1, T):
+            ca[0, j] = torch.max(ca[0, j - 1], dist[0, j])
+
+        for i in range(1, T):
+            for j in range(1, T):
                 ca[i, j] = torch.max(
                     torch.min(torch.stack([
-                        recurse(i - 1, j),
-                        recurse(i - 1, j - 1),
-                        recurse(i, j - 1)
+                        ca[i - 1, j],
+                        ca[i - 1, j - 1],
+                        ca[i, j - 1],
                     ])),
                     dist[i, j]
                 )
-            else:
-                ca[i, j] = float("inf")
-            return ca[i, j]
 
-        return recurse(T - 1, T - 1).item()
+        return ca[-1, -1].item()
 
 
 @dataclass

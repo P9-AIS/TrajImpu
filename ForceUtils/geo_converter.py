@@ -48,11 +48,17 @@ class GeoConverter:
 
     @staticmethod
     def espg4326_to_epsg3034_batch(lon: np.ndarray, lat: np.ndarray):
-        catted = np.column_stack((lon.flatten(), lat.flatten()))
-        transformed = GeoConverter._from_espg4326.transform(catted[:, 0], catted[:, 1])
+        transformed = GeoConverter._from_espg4326.transform(lon, lat)
         ES = transformed[0].reshape(lon.shape)
         NS = transformed[1].reshape(lat.shape)
         return ES, NS
+
+    @staticmethod
+    def espg3034_to_epsg4326_batch(E: np.ndarray, N: np.ndarray):
+        transformed = GeoConverter._to_espg4326.transform(E, N)
+        lon = transformed[0].reshape(E.shape)
+        lat = transformed[1].reshape(N.shape)
+        return lon, lat
 
     @staticmethod
     def espg4326_to_epsg3034_batch_tensor(lon: torch.Tensor, lat: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -171,4 +177,3 @@ class GeoConverter:
         N4 = N3
 
         return [(E1, N1), (E2, N2), (E3, N3), (E4, N4)]
-

@@ -38,10 +38,10 @@ class Predicter:
 
         acc = LossAccumulator()
 
-        all_pred_lats = []
-        all_pred_lons = []
-        all_true_lats = []
-        all_true_lons = []
+        all_pred_northerns = []
+        all_pred_easterns = []
+        all_true_northerns = []
+        all_true_easterns = []
         all_masks = []
 
         it = tqdm(self._dataloader, mininterval=2.0)
@@ -53,27 +53,27 @@ class Predicter:
 
                 acc.add_batch(loss, batch_size)
 
-                all_pred_lats.append(pred_lats.cpu())
-                all_pred_lons.append(pred_lons.cpu())
-                all_true_lats.append(true_lats.cpu())
-                all_true_lons.append(true_lons.cpu())
+                all_pred_northerns.append(pred_lats.cpu())
+                all_pred_easterns.append(pred_lons.cpu())
+                all_true_northerns.append(true_lats.cpu())
+                all_true_easterns.append(true_lons.cpu())
                 all_masks.append(batch.masks.cpu())
 
         # concat
-        all_pred_lats = torch.cat(all_pred_lats, dim=0)
-        all_pred_lons = torch.cat(all_pred_lons, dim=0)
-        all_true_lats = torch.cat(all_true_lats, dim=0)
-        all_true_lons = torch.cat(all_true_lons, dim=0)
+        all_pred_northerns = torch.cat(all_pred_northerns, dim=0)
+        all_pred_easterns = torch.cat(all_pred_easterns, dim=0)
+        all_true_northerns = torch.cat(all_true_northerns, dim=0)
+        all_true_easterns = torch.cat(all_true_easterns, dim=0)
         all_masks = torch.cat(all_masks, dim=0)
 
         # upload
         self._upload_handler.upload_predictions(
             model_name=model_name,
             masks=all_masks,
-            predicted_lats=all_pred_lats,
-            predicted_lons=all_pred_lons,
-            true_lats=all_true_lats,
-            true_lons=all_true_lons,
+            predicted_northerns=all_pred_northerns,
+            predicted_easterns=all_pred_easterns,
+            true_northerns=all_true_northerns,
+            true_easterns=all_true_easterns,
         )
 
         avg = acc.average()
@@ -85,9 +85,9 @@ class Predicter:
         print(f"Average MAE pos_dist loss: {avg.mae.pos_dist:.4f}")
 
         return (
-            all_pred_lats,
-            all_pred_lons,
-            all_true_lats,
-            all_true_lons,
+            all_pred_northerns,
+            all_pred_easterns,
+            all_true_northerns,
+            all_true_easterns,
             avg.mae.as_dict(),
         )

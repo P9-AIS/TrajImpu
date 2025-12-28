@@ -15,15 +15,15 @@ class AISBatch:
     observed_timestamps: torch.Tensor
     masks: torch.Tensor
     num_missing_values: int
-    lats: torch.Tensor
-    lons: torch.Tensor
+    northerns: torch.Tensor
+    easterns: torch.Tensor
 
 
 class AISDatasetMasked(Dataset[AISBatch]):
-    def __init__(self, timestamps: np.ndarray, lats: np.ndarray, lons: np.ndarray, data: np.ndarray, masks: np.ndarray, num_masked_values: int, stats: AISStats):
+    def __init__(self, timestamps: np.ndarray, northerns: np.ndarray, easterns: np.ndarray, data: np.ndarray, masks: np.ndarray, num_masked_values: int, stats: AISStats):
         self.timestamps = timestamps
-        self.lats = lats
-        self.lons = lons
+        self.northerns = northerns
+        self.easterns = easterns
         self.data = data
         self.masks = masks
         self.num_masked_values = num_masked_values
@@ -38,8 +38,8 @@ class AISDatasetMasked(Dataset[AISBatch]):
             observed_timestamps=torch.tensor(self.timestamps[idx], dtype=torch.int32, requires_grad=False),  # [maxlen]
             masks=torch.tensor(self.masks[idx], dtype=torch.int8, requires_grad=False),  # [maxlen, n]
             num_missing_values=self.num_masked_values,  # scalar
-            lats=torch.tensor(self.lats[idx], dtype=torch.float32, requires_grad=False),
-            lons=torch.tensor(self.lons[idx], dtype=torch.float32, requires_grad=False),
+            northerns=torch.tensor(self.northerns[idx], dtype=torch.float32),
+            easterns=torch.tensor(self.easterns[idx], dtype=torch.float32),
         )
 
     @staticmethod
@@ -49,8 +49,8 @@ class AISDatasetMasked(Dataset[AISBatch]):
             observed_timestamps=torch.stack([b.observed_timestamps for b in batch]),
             masks=torch.stack([b.masks for b in batch]),
             num_missing_values=max(b.num_missing_values for b in batch),  # or keep as list
-            lats=torch.stack([b.lats for b in batch]),
-            lons=torch.stack([b.lons for b in batch]),
+            northerns=torch.stack([b.northerns for b in batch]),
+            easterns=torch.stack([b.easterns for b in batch]),
         )
 
     @staticmethod
@@ -61,8 +61,8 @@ class AISDatasetMasked(Dataset[AISBatch]):
             masks=masks,
             num_masked_values=stats.num_masked_values,
             stats=stats,
-            lats=processed_dataset.lats,
-            lons=processed_dataset.lons,
+            northerns=processed_dataset.northerns,
+            easterns=processed_dataset.easterns,
         )
         return instance
 
@@ -75,8 +75,8 @@ class AISDatasetMasked(Dataset[AISBatch]):
             data=self.data,
             timestamps=self.timestamps,
             masks=self.masks,
-            lats=self.lats,
-            lons=self.lons,
+            northerns=self.northerns,
+            easterns=self.easterns,
         )
         print(f"Saved masked ais dataset of {self.data.shape[0]:,} trajectories\n")
 
@@ -88,7 +88,7 @@ class AISDatasetMasked(Dataset[AISBatch]):
             dataset.data = data['data']
             dataset.timestamps = data['timestamps']
             dataset.masks = data['masks']
-            dataset.lats = data['lats']
-            dataset.lons = data['lons']
+            dataset.northerns = data['northerns']
+            dataset.easterns = data['easterns']
         print(f"Loaded masked ais dataset of {dataset.data.shape[0]:,} trajectories\n")
         return dataset

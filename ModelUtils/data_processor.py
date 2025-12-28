@@ -257,10 +257,10 @@ class DataProcessor:
 
         trajectories = np.array(filtered_trajectories, dtype=np.float64)
 
-        delta_E, delta_N = DataProcessor.get_deltas(trajectories)
+        E, N, delta_E, delta_N = DataProcessor.get_deltas(trajectories)
 
         trajectories = np.concatenate(
-            (trajectories, delta_N[:, :, np.newaxis], delta_E[:, :, np.newaxis]), axis=2, dtype=np.float64)
+            (trajectories, N[:, :, np.newaxis], E[:, :, np.newaxis], delta_N[:, :, np.newaxis], delta_E[:, :, np.newaxis]), axis=2, dtype=np.float64)
 
         return trajectories
 
@@ -317,27 +317,18 @@ class DataProcessor:
         return masks
 
     @staticmethod
-    def get_deltas(trajectories: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        batch, seq, _ = trajectories.shape
-
-        # Initialize pyproj transformer: WGS84 lat/lon -> EPSG:3034 (meters)
-        transformer = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:3034", always_xy=True)
-
-        # Convert all lat/lon to E/N in meters
+    def get_deltas(trajectories: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         lons = trajectories[:, :, 2]
         lats = trajectories[:, :, 1]
 
-        E, N = transformer.transform(lons.reshape(-1), lats.reshape(-1))
-        E = E.reshape(batch, seq)
-        N = N.reshape(batch, seq)
+        E, N = gc.espg4326_to_epsg3034_batch(lons, lats)
 
-        # Compute step-wise deltas in meters
-        delta_E = np.zeros_like(E)
-        delta_N = np.zeros_like(N)
+        delta_E = np.zeros_like(E, dtype=np.float64)
+        delta_N = np.zeros_like(N, dtype=np.float64)
         delta_E[:, 1:] = E[:, 1:] - E[:, :-1]
         delta_N[:, 1:] = N[:, 1:] - N[:, :-1]
 
-        return delta_E, delta_N
+        return E, N, delta_E, delta_N
 
     @staticmethod
     def _spatially_convert_dataset(trajectories: np.ndarray) -> np.ndarray:
@@ -395,10 +386,8 @@ class DataProcessor:
             last_lat = lat
             last_lon = lon
 
-
         if curr_trajectory_idxes:
             candidate_trajectories.append(curr_trajectory_idxes)
-
 
         same_length_trajectories = []
 
@@ -611,7 +600,8 @@ class DataProcessor:
         # 1. Get the displacement vectors in meters (The "Deltas")
         # delta_E/N shape is expected to be (Batch, Steps). We take index [0].
         # These represent the vector of movement for each time step.
-        delta_E, delta_N = DataProcessor.get_deltas(trajectory.reshape(1, trajectory.shape[0], trajectory.shape[1]))
+        _E, _N, delta_E, delta_N = DataProcessor.get_deltas(
+            trajectory.reshape(1, trajectory.shape[0], trajectory.shape[1]))
 
         # Stack them to get shape (Num_Segments, 2)
         # vectors[i] = [meters_east, meters_north] for step i

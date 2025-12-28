@@ -1,28 +1,28 @@
 import os
 import pickle
 import numpy as np
+from ForceUtils.geo_converter import GeoConverter as gc
 
 
 class AISDatasetProcessed():
     def __init__(self, data: np.ndarray):
         assert data.ndim == 3, "Data must be a 3D numpy array (num_samples, seq_len, num_features)."
-        self.data, self.timestamps, self.lats, self.lons = self._get_data(data)
+        self.data, self.timestamps, self.easterns, self.northerns = self._get_data(data)
 
     def combine(self, other: "AISDatasetProcessed"):
         self.data = np.vstack((self.data, other.data))
         self.timestamps = np.vstack((self.timestamps, other.timestamps))
-        self.lats = np.vstack((self.lats, other.lats))
-        self.lons = np.vstack((self.lons, other.lons))
+        self.easterns = np.vstack((self.easterns, other.easterns))
+        self.northerns = np.vstack((self.northerns, other.northerns))
 
     def _get_data(self, data: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         timestamps = data[:, :, 0].copy().astype(np.int32)
 
-        lats = data[:, :, 1].copy()
-        lons = data[:, :, 2].copy()
+        northerns = data[:, :, -4].copy()
+        easterns = data[:, :, -3].copy()
+        deltas = data[:, :, -2:].copy()
 
-        new_data = data[:, :, -2:].copy()
-
-        return new_data, timestamps, lats, lons
+        return deltas, timestamps, easterns, northerns
 
     def limit_size(self, max_samples: int):
         if self.data.shape[0] <= max_samples:
@@ -32,8 +32,8 @@ class AISDatasetProcessed():
         print(f"Limiting dataset from {self.data.shape[0]} to {max_samples} samples.")
         self.data = self.data[:max_samples]
         self.timestamps = self.timestamps[:max_samples]
-        self.lats = self.lats[:max_samples]
-        self.lons = self.lons[:max_samples]
+        self.easterns = self.easterns[:max_samples]
+        self.northerns = self.northerns[:max_samples]
 
     def save(self, path: str):
         os.makedirs(os.path.dirname(path), exist_ok=True)

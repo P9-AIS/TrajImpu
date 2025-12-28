@@ -9,8 +9,8 @@ class IModelDataUploadHandler(ABC):
         pass
 
     @abstractmethod
-    def upload_predictions(self, model_name, masks, predicted_lats: torch.Tensor, predicted_lons: torch.Tensor,
-                           true_lats: torch.Tensor, true_lons: torch.Tensor) -> None:
+    def upload_predictions(self, model_name, masks, predicted_northerns: torch.Tensor, predicted_easterns: torch.Tensor,
+                           true_northerns: torch.Tensor, true_easterns: torch.Tensor) -> None:
         pass
 
     @abstractmethod
