@@ -111,8 +111,7 @@ class DepthForceProvider(IForceProvider):
         return self._vectormap
 
     def get_force(self, p: Params) -> Vec3:
-        E, N = gc.espg4326_to_epsg3034(p.lon, p.lat)
-        x, y = self._tilemap.tile_from_espg3034(E, N)
+        x, y = self._tilemap.tile_from_espg3034(p.easterns, p.northerns)
 
         dim_x, dim_y = self._tilemap.get_dimensions()
         if x < 0 or x >= dim_x or y < 0 or y >= dim_y:
@@ -123,32 +122,17 @@ class DepthForceProvider(IForceProvider):
 
         return Vec3(x_force, y_force, 0.0)
 
-    def get_forces_tensor(self, vals: torch.Tensor) -> torch.Tensor:
-        b, s, _ = vals.shape
+    def get_forces_tensor(self, northerns: torch.Tensor, easterns: torch.Tensor) -> torch.Tensor:
+        b, s = northerns.shape
         forces = []
 
         for i in range(b):
             batch_forces = []
             for j in range(s):
-                lat = vals[i, j, 0].item()
-                lon = vals[i, j, 1].item()
-                force_vec = self.get_force(Params(lon=lon, lat=lat))
+                northern = northerns[i, j].item()
+                eastern = easterns[i, j].item()
+                force_vec = self.get_force(Params(northerns=northern, easterns=eastern))
                 batch_forces.append([force_vec.x, force_vec.y])
             forces.append(batch_forces)
 
         return torch.tensor(forces, dtype=torch.float32)  # shape [b, s, 2]
-
-    def get_forces_np(self, vals: np.ndarray) -> np.ndarray:
-        b, s, _ = vals.shape
-        forces = []
-
-        for i in range(b):
-            batch_forces = []
-            for j in range(s):
-                lat = vals[i, j, 0]
-                lon = vals[i, j, 1]
-                force_vec = self.get_force(Params(lon=lon, lat=lat))
-                batch_forces.append([force_vec.x, force_vec.y])
-            forces.append(batch_forces)
-
-        return np.array(forces, dtype=np.float32)  # shape [b, s, 2]

@@ -66,7 +66,7 @@ class LossCalculator:
 
         force_loss = LossCalculator.get_loss(loss_type, forces_pred, forces_true)
 
-        total_loss = pos_distance_loss + 10 * delta_hyp_loss  # + 1000 * total_consistency_loss + 10 * force_loss
+        total_loss = pos_distance_loss + 10 * delta_hyp_loss + 500 * total_consistency_loss + 10 * force_loss
 
         if not training:
             full_pos_distance = LossCalculator._calc_hyp(

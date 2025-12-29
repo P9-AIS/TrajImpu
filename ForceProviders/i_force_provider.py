@@ -12,9 +12,5 @@ class IForceProvider(ABC):
         pass
 
     @abstractmethod
-    def get_forces_np(self, vals: np.ndarray) -> np.ndarray:
-        pass
-
-    @abstractmethod
-    def get_forces_tensor(self, vals: torch.Tensor) -> torch.Tensor:
+    def get_forces_tensor(self, northerns: torch.Tensor, easterns: torch.Tensor) -> torch.Tensor:
         pass

@@ -48,7 +48,7 @@ class Predicter:
 
         with torch.no_grad():
             for batch in it:
-                loss, (pred_lats, pred_lons, true_lats, true_lons) = self._model.forward(batch)
+                loss, _, (pred_lats, pred_lons, true_lats, true_lons) = self._model.forward(batch)
                 batch_size = batch.observed_data.size(0)
 
                 acc.add_batch(loss, batch_size)

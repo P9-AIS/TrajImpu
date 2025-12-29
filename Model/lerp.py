@@ -39,7 +39,7 @@ class Model(nn.Module):
         delta_east = dlon * R * torch.cos((lat1_rad + lat2_rad) / 2)
         return delta_north, delta_east
 
-    def forward(self, ais_batch: AISBatch) -> tuple[LossTypes, tuple[torch.Tensor, ...]]:
+    def forward(self, ais_batch: AISBatch) -> tuple[LossTypes, dict, tuple[torch.Tensor, ...]]:
         # Ground truth
         true_lats = ais_batch.lats.to(self._cfg.device)
         true_lons = ais_batch.lons.to(self._cfg.device)
@@ -137,4 +137,4 @@ class Model(nn.Module):
             forces_true,
         )
 
-        return loss, (lats, lons, true_lats, true_lons)
+        return loss, {}, (lats, lons, true_lats, true_lons)

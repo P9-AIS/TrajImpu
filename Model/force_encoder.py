@@ -19,10 +19,10 @@ class ForceEncoder(nn.Module):
         )
 
     def forward(self, northerns: torch.Tensor, easterns: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        lons, lats = gc.epsg3034_to_espg4326_batch_tensor(easterns, northerns)  # [b, s]
-
-        lat_lons = torch.stack((lats, lons), dim=-1)  # [b, s, 2]
-        raw_forces = self._force_provider.get_forces_tensor(lat_lons).to(lats.device)  # [b, s, 2]
-
+        raw_forces = self.get_raw_forces(northerns, easterns)  # [b, s, 2]
         force_embedding = self.force_proj(raw_forces)  # [b, s, feature_dim]
         return force_embedding, raw_forces
+
+    def get_raw_forces(self, northerns: torch.Tensor, easterns: torch.Tensor) -> torch.Tensor:
+        raw_forces = self._force_provider.get_forces_tensor(northerns, easterns).to(northerns.device)  # [b, s, 2]
+        return raw_forces

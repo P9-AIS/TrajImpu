@@ -92,7 +92,7 @@ class Trainer:
             for batch_no, batch in enumerate(it, start=1):
                 self._optimizer.zero_grad()
 
-                loss, _ = self._model.forward(batch, curric_prob=curriculum_prob)
+                loss, observables, _ = self._model.forward(batch, curric_prob=curriculum_prob)
                 loss.mse.total_loss.backward()
                 self._optimizer.step()
                 self._global_training_step += 1
@@ -104,6 +104,9 @@ class Trainer:
                                         self._global_training_step)
                 self._writer.add_scalar("train/force", loss.mae.force_loss.item(),
                                         self._global_training_step)
+
+                for name, val in observables.items():
+                    self._writer.add_scalar(f"train/observables/{name}", val, self._global_training_step)
 
                 total_loss += loss.mse.total_loss.item()
                 average_loss = total_loss / batch_no
@@ -128,7 +131,7 @@ class Trainer:
 
         with torch.no_grad():
             for batch_no, batch in enumerate(it, start=1):
-                loss, _ = self._model(batch)
+                loss, _, _ = self._model(batch)
 
                 loss = loss.mae.total_loss
                 total_loss += loss.item()
@@ -158,7 +161,7 @@ class Trainer:
 
         with torch.no_grad():
             for batch in it:
-                loss, _ = self._model(batch)
+                loss, _, _ = self._model(batch)
                 batch_size = batch.observed_data.size(0)
 
                 acc.add_batch(loss, batch_size)

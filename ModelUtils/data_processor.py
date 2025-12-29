@@ -252,7 +252,6 @@ class DataProcessor:
             if group_trajectories:
                 initial_trajectories.extend(group_trajectories)
 
-        # filtered_trajectories = self._filter_trajectories_forces(initial_trajectories, self._depth_force_provider)
         filtered_trajectories = self._filter_trajectories_smooth(initial_trajectories)
 
         trajectories = np.array(filtered_trajectories, dtype=np.float64)
@@ -443,30 +442,6 @@ class DataProcessor:
 
         return True
 
-    def _filter_trajectories_forces(self, trajectories: list[np.ndarray], force_provider: IForceProvider) -> list[np.ndarray]:
-        traj_and_impacts = [(traj, DataProcessor._get_trajectory_perpendicular_impact(traj, force_provider))
-                            for traj in trajectories]
-
-        # Here we sort descending (highest impact first)
-        traj_and_impacts.sort(key=lambda x: x[1], reverse=True)
-
-        n = len(traj_and_impacts)
-        if n == 0:
-            return []
-
-        cutoff_start = int(n * 0.01)
-        cutoff_end = int(n * 0.05)
-
-        start_index = cutoff_start
-        end_index = cutoff_end
-
-        if start_index >= end_index:
-            return trajectories
-
-        filtered_pairs = traj_and_impacts[start_index:end_index]
-
-        return [pair[0] for pair in filtered_pairs]
-
     def _filter_trajectories_smooth(self, trajectories: list[np.ndarray]) -> list[np.ndarray]:
         """
         Filters trajectories to keep non-trivial, smooth curves (like gentle S patterns).
@@ -541,59 +516,6 @@ class DataProcessor:
                 filtered.append(traj)
 
         return filtered
-
-    @staticmethod
-    def _get_trajectory_force_impact(trajectory: np.ndarray, force_provider: IForceProvider) -> np.ndarray:
-        lats = trajectory[:, 1]
-        lons = trajectory[:, 2]
-
-        forces = force_provider.get_forces_np(np.stack((lats, lons), axis=-1)[np.newaxis, :, :])
-
-        force_magnitudes = np.hypot(forces[0, :, 0], forces[0, :, 1])
-        force_impact = np.sum(force_magnitudes)
-
-        return force_impact
-
-    @staticmethod
-    def _get_trajectory_perpendicular_impact(trajectory: np.ndarray, force_provider: IForceProvider) -> float:
-        # 1. Get Trajectory Direction Vectors (The ship's movement)
-        # Note: We need vectors for each point. Since we have N points, we get N-1 segments.
-        # We can repeat the last vector to match the shape or discard the last force point.
-        # Let's discard the last force point to match the N-1 movement segments.
-
-        # Extract Lat/Lon (assuming cols 1 and 2)
-        coords = trajectory[:, 1:3]
-
-        # Calculate displacement vectors (d_lat, d_lon)
-        # shape: (N-1, 2)
-        move_vecs = np.diff(coords, axis=0)
-
-        # Normalize movement vectors to get pure Direction (Unit Vectors)
-        move_norms = np.linalg.norm(move_vecs, axis=1, keepdims=True)
-        # Avoid division by zero for stationary points
-        move_norms[move_norms < 1e-6] = 1.0
-        move_dir = move_vecs / move_norms
-
-        # 2. Get Forces at these points
-        # We only care about forces at the start of each segment (points 0 to N-1)
-        lats = coords[:-1, 0]
-        lons = coords[:-1, 1]
-
-        # force_provider expects (Batch, Steps, 2). We give it 1 batch.
-        # forces shape: (1, N-1, 2) -> we take [0] to get (N-1, 2)
-        forces = force_provider.get_forces_np(np.stack((lats, lons), axis=-1)[np.newaxis, :, :])[0]
-
-        # 3. Calculate Perpendicular Component (The "Sideways" Force)
-        # 2D Cross Product (determinant):  A_x * B_y - A_y * B_x
-        # move_dir is A, forces is B
-        # Result is the scalar magnitude of the force acting perpendicular to movement
-        perp_forces = move_dir[:, 0] * forces[:, 1] - move_dir[:, 1] * forces[:, 0]
-
-        # 4. Summarize
-        # We take absolute value because we care if it pushes Left OR Right
-        total_perp_impact = np.sum(np.abs(perp_forces))
-
-        return float(total_perp_impact)
 
     @staticmethod
     def get_trajectory_metrics(trajectory: np.ndarray):
