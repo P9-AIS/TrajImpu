@@ -24,29 +24,13 @@ class Model(nn.Module):
     def __str__(self):
         return "lerp"
 
-    @staticmethod
-    def _compute_deltas_meters(lat1, lon1, lat2, lon2):
-        """
-        Computes north/east displacement in meters using equirectangular approximation.
-        """
-        R = 6371000.0  # Earth radius in meters
-        lat1_rad = lat1 * math.pi / 180
-        lat2_rad = lat2 * math.pi / 180
-        dlat = (lat2 - lat1) * math.pi / 180
-        dlon = (lon2 - lon1) * math.pi / 180
-
-        delta_north = dlat * R
-        delta_east = dlon * R * torch.cos((lat1_rad + lat2_rad) / 2)
-        return delta_north, delta_east
-
     def forward(self, ais_batch: AISBatch) -> tuple[LossTypes, dict, tuple[torch.Tensor, ...]]:
-        # Ground truth
-        true_lats = ais_batch.lats.to(self._cfg.device)
-        true_lons = ais_batch.lons.to(self._cfg.device)
+        northerns = ais_batch.northerns.contiguous().to(self._cfg.device)
+        easterns = ais_batch.easterns.contiguous().to(self._cfg.device)
 
-        # Start with GT and interpolate missing
-        lats = true_lats.clone()
-        lons = true_lons.clone()
+        # Ground truth
+        true_northerns = northerns.contiguous().clone().to(self._cfg.device).detach()
+        true_easterns = easterns.contiguous().clone().to(self._cfg.device).detach()
 
         timestamps = ais_batch.observed_timestamps.to(self._cfg.device)
         masks = ais_batch.masks.to(self._cfg.device)
@@ -57,7 +41,7 @@ class Model(nn.Module):
             * masks[:, :, AISColDict.EASTERN_DELTA.value]
         ).bool()
 
-        B, S = lats.shape
+        B, S = northerns.shape
 
         # Linear interpolation
         for b in range(B):
@@ -73,16 +57,16 @@ class Model(nn.Module):
                 denom = time1 - time0
                 if denom == 0:
                     continue
-                lat0, lon0 = lats[b, t0], lons[b, t0]
-                lat1, lon1 = lats[b, t1], lons[b, t1]
+                n0, e0 = northerns[b, t0], easterns[b, t0]
+                n1, e1 = northerns[b, t1], easterns[b, t1]
                 for t in range(t0 + 1, t1):
                     alpha = (timestamps[b, t] - time0) / denom
-                    lats[b, t] = (1 - alpha) * lat0 + alpha * lat1
-                    lons[b, t] = (1 - alpha) * lon0 + alpha * lon1
+                    northerns[b, t] = (1 - alpha) * n0 + alpha * n1
+                    easterns[b, t] = (1 - alpha) * e0 + alpha * e1
 
         # Full trajectory tensors
-        full_traj_pred = torch.stack([lats, lons], dim=-1)
-        full_traj_true = torch.stack([true_lats, true_lons], dim=-1)
+        full_traj_pred = torch.stack([northerns, easterns], dim=-1)
+        full_traj_true = torch.stack([true_northerns, true_easterns], dim=-1)
 
         # --- Only masked positions ---
         missing_mask = ~pos_valid_mask
@@ -108,13 +92,14 @@ class Model(nn.Module):
                 if t == 0:
                     continue  # can't compute delta for first timestep
                 # Predicted
-                dn, de = self._compute_deltas_meters(lats[b, t - 1], lons[b, t - 1], lats[b, t], lons[b, t])
+                dn = northerns[b, t] - northerns[b, t - 1]
+                de = easterns[b, t] - easterns[b, t - 1]
                 deltas_pred[b, i, AISColDict.NORTHERN_DELTA.value] = dn
                 deltas_pred[b, i, AISColDict.EASTERN_DELTA.value] = de
                 # True
-                dn_true, de_true = self._compute_deltas_meters(
-                    true_lats[b, t - 1], true_lons[b, t - 1], true_lats[b, t], true_lons[b, t]
-                )
+                dn_true = true_northerns[b, t] - true_northerns[b, t - 1]
+                de_true = true_easterns[b, t] - true_easterns[b, t - 1]
+
                 deltas_true[b, i, AISColDict.NORTHERN_DELTA.value] = dn_true
                 deltas_true[b, i, AISColDict.EASTERN_DELTA.value] = de_true
 
@@ -137,4 +122,4 @@ class Model(nn.Module):
             forces_true,
         )
 
-        return loss, {}, (lats, lons, true_lats, true_lons)
+        return loss, {}, (northerns, easterns, true_northerns, true_easterns)
