@@ -217,8 +217,6 @@ class Model(nn.Module):
             total_consistency_loss,
             forces_pred, forces_true)
 
-        print("force_scale grad:", self.force_scale.grad)
-
         observables = {
             "force_scale": self.force_scale.item()
         }
