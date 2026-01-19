@@ -6,29 +6,6 @@ import torch.nn.functional as F
 from ModelTypes.ais_col_dict import AISColDict
 from ModelTypes.ais_stats import AISStats
 
-
-# class ContinuousDecoderTwo(nn.Module):
-#     def __init__(self, feature_dim):
-#         super().__init__()
-#         af = feature_dim // len(AISColDict)  # make sure this matches encoder output
-
-#         self.mlp = nn.Linear(af, 1)  # linear layer only, no Tanh
-
-#     def forward(self, e_xk, min_val, max_val):
-#         h_n = self.mlp(e_xk)  # [b*s, 1, 1]
-
-#         delta_range = max_val - min_val
-#         safe_denominator = torch.clamp(delta_range, min=1e-6)
-
-#         # Correct inverse normalization
-#         x_hat = (h_n + 1) / 2 * safe_denominator + min_val  # map [-1,1] → [min,max]
-
-#         # Clamp to ensure range safety
-#         x_hat = torch.clamp(x_hat, min=min_val, max=max_val)
-
-#         return x_hat  # [b, s, 1]
-
-
 class ContinuousDecoderRobust(nn.Module):
     def __init__(self, feature_dim, output_dim=1):
         super().__init__()
@@ -55,21 +32,21 @@ class HeterogeneousAttributeDecoder(nn.Module):
 
         self.stats = stats
 
-        self.lat_decoder = ContinuousDecoderRobust(feature_dim // 2)
-        self.lon_decoder = ContinuousDecoderRobust(feature_dim // 2)
+        self.northern_decoder = ContinuousDecoderRobust(feature_dim // 2)
+        self.eastern_decoder = ContinuousDecoderRobust(feature_dim // 2)
 
     def forward(self, ais_data: torch.Tensor) -> torch.Tensor:
         b, s, f = ais_data.shape
         af = f // 2
 
-        lat_encoding = ais_data[:, :, AISColDict.NORTHERN_DELTA.value*af: (AISColDict.NORTHERN_DELTA.value+1)*af]
-        lon_encoding = ais_data[:, :, AISColDict.EASTERN_DELTA.value*af: (AISColDict.EASTERN_DELTA.value+1)*af]
+        northern_encoding = ais_data[:, :, AISColDict.NORTHERN_DELTA.value*af: (AISColDict.NORTHERN_DELTA.value+1)*af]
+        eastern_encoding = ais_data[:, :, AISColDict.EASTERN_DELTA.value*af: (AISColDict.EASTERN_DELTA.value+1)*af]
 
-        lat_hat = self.lat_decoder(lat_encoding)
-        lon_hat = self.lon_decoder(lon_encoding)
+        northern_hat = self.northern_decoder(northern_encoding)
+        eastern_hat = self.eastern_decoder(eastern_encoding)
 
-        upscaled_northern_deltas = lat_hat * self.stats.std_delta_n + self.stats.mean_abs_delta_n
-        upscaled_eastern_deltas = lon_hat * self.stats.std_delta_e + self.stats.mean_abs_delta_e
+        upscaled_northern_deltas = northern_hat * self.stats.std_delta_n + self.stats.mean_abs_delta_n
+        upscaled_eastern_deltas = eastern_hat * self.stats.std_delta_e + self.stats.mean_abs_delta_e
 
         output = torch.cat([upscaled_northern_deltas, upscaled_eastern_deltas], dim=-1)  # [b, s, num_ais_attr]
 

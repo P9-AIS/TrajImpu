@@ -3,27 +3,6 @@ import torch.nn as nn
 from ModelTypes.ais_col_dict import AISColDict
 from ModelTypes.ais_stats import AISStats
 
-
-# class ContinuousEncoderTwo(nn.Module):
-#     def __init__(self, d_model_E):
-#         super().__init__()
-#         self.mlp = nn.Sequential(
-#             nn.Linear(1, d_model_E),
-#             nn.Tanh(),
-#         )
-
-#     def forward(self, x, min_val, max_val):
-#         denominator = torch.clamp(max_val - min_val, min=1e-6)
-#         x_norm = 2 * (x - min_val) / denominator - 1
-
-#         batch_size, seq_len, _ = x_norm.shape
-
-#         x_encoded = self.mlp(x_norm.view(-1, 1))  # [b*s, d_model_E]
-#         x_encoded = x_encoded.view(batch_size, seq_len, 1, -1)  # [b, s, 1, d_model_E]
-
-#         return x_encoded
-
-
 import torch
 import torch.nn as nn
 import numpy as np
@@ -76,8 +55,8 @@ class HeterogeneousAttributeEncoder(nn.Module):
         super().__init__()
         self.stats = stats
 
-        self.lat_continous_encoder = ContinuousDeltaEncoder(feature_dim)
-        self.lon_continous_encoder = ContinuousDeltaEncoder(feature_dim)
+        self.northern_continous_encoder = ContinuousDeltaEncoder(feature_dim)
+        self.eastern_continous_encoder = ContinuousDeltaEncoder(feature_dim)
 
         self.output_dim = (len(AISColDict) * feature_dim)
         self.latitude_col_idx = AISColDict.NORTHERN_DELTA.value
@@ -92,10 +71,10 @@ class HeterogeneousAttributeEncoder(nn.Module):
         scaled_northern_deltas = (northern_deltas - self.stats.mean_abs_delta_n) / self.stats.std_delta_n
         scaled_eastern_deltas = (eastern_deltas - self.stats.mean_abs_delta_e) / self.stats.std_delta_e
 
-        lat_output = self.lat_continous_encoder(scaled_northern_deltas)
-        lon_output = self.lon_continous_encoder(scaled_eastern_deltas)
+        northern_output = self.northern_continous_encoder(scaled_northern_deltas)
+        eastern_output = self.eastern_continous_encoder(scaled_eastern_deltas)
 
-        output = torch.cat((lat_output, lon_output), dim=2)  # shape [b, s, len(AISColDict), feature_dim]
+        output = torch.cat((northern_output, eastern_output), dim=2)  # shape [b, s, len(AISColDict), feature_dim]
         output = output.view(b, s, -1)  # shape [b, s, len(AISColDict)*feature_dim]
 
         return output
