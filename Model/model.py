@@ -67,9 +67,11 @@ class Model(nn.Module):
         mask_north = masks[:, :, AISColDict.NORTHERN_DELTA.value].unsqueeze(-1)
         mask_east = masks[:, :, AISColDict.EASTERN_DELTA.value].unsqueeze(-1)
         mask_force_base = mask_north * mask_east
+
         fine_mask_force = mask_force_base.repeat(1, 1, self._cfg.dim_ais_attr_encoding)
         fine_mask_north = mask_north.repeat(1, 1, self._cfg.dim_ais_attr_encoding)
         fine_mask_east = mask_east.repeat(1, 1, self._cfg.dim_ais_attr_encoding)
+
         fine_masks = torch.cat([
             fine_mask_north,
             fine_mask_east,
@@ -175,8 +177,8 @@ class Model(nn.Module):
             northerns = northerns.scatter(1, last_scatter_idx, last_pos_pred[:, :, 0])
             easterns = easterns.scatter(1, last_scatter_idx, last_pos_pred[:, :, 1])
 
-            first_features = torch.cat((first_encoded, first_forces), dim=-1)
-            last_features = torch.cat((last_encoded, last_forces), dim=-1)
+            first_features = torch.cat((first_input, first_forces), dim=-1)
+            last_features = torch.cat((last_input, last_forces), dim=-1)
 
             # update encoded sequence with NEW ground truth / imputed value
             first_scatter_index = first_mask_idx.view(-1, 1, 1).expand(-1, 1, f)

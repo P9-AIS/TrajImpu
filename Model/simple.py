@@ -143,8 +143,8 @@ class Model(nn.Module):
             first_scatter_index = first_mask_idx.view(-1, 1, 1).expand(-1, 1, f)
             last_scatter_index = last_mask_idx.view(-1, 1, 1).expand(-1, 1, f)
 
-            encoded = encoded.scatter(1, first_scatter_index, first_encoded.detach())
-            encoded = encoded.scatter(1, last_scatter_index, last_encoded.detach())
+            encoded = encoded.scatter(1, first_scatter_index, first_input)
+            encoded = encoded.scatter(1, last_scatter_index, last_input)
 
             fine_masks = fine_masks.scatter(1, first_scatter_index, 1)
             fine_masks = fine_masks.scatter(1, last_scatter_index, 1)
